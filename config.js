@@ -3,6 +3,6 @@
 //   api    : 備份機器人 GAS 網頁應用程式的網址，結尾是 /exec，不要帶 ?key=
 // 兩項都填好之前，頁面以「示範模式」顯示假資料。
 window.BACKUP_BOT = {
-  liffId: '',
-  api: ''
+  liffId: '2012625445-ryMPPHXp',
+  api: 'https://script.google.com/macros/s/AKfycbyHA3xFSy0tAT1bpQi6XLb_uSvgJbaqBZ62sFdaQihQKBlzZjkcl1RVFtTeILdAhWg/exec'
 };
