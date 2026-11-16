@@ -130,3 +130,8 @@ textarea.t{min-height:96px;resize:vertical}
 .stepper{display:flex;align-items:center;gap:var(--s2)}
 .stepper button{width:44px;min-height:44px;padding:0}
 .stepper output{min-width:28px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
+.seat.podcell{background:var(--ink);border-color:var(--ink);color:var(--bg);font-size:12px;border-radius:4px}
+.seat.teach{background:var(--warn-soft);border-color:var(--warn);color:var(--warn);flex-direction:column;gap:0}
+.seat.teach small{font-size:9px;line-height:1;max-width:100%;overflow:hidden;white-space:nowrap}
+.seat.label{border:1px dashed var(--line);background:transparent;color:var(--ink-2);font-size:10px;font-weight:600;white-space:normal;word-break:break-all;padding:1px}
+.chip[role=radio][aria-checked=true]{background:var(--brand-soft);border-color:var(--brand);color:var(--brand);font-weight:600}
