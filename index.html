@@ -227,7 +227,7 @@ const VIEW={
         ${o.roster.length?`<ul class="list">${o.roster.map(s=>`<li><button type="button" class="rowbtn" data-person="${s.person}" data-name="${esc(s.who)}">
           <div class="grow"><div><b>${esc(s.who)}</b></div><div class="meta"><span class="num">訊息 ${s.messages}</span><span class="num">檔案 ${s.files}</span><span class="num">最後 ${when(s.last)}</span></div></div>
           <span style="color:var(--ink-2);font-size:13px">看紀錄 ›</span></button></li>`).join('')}</ul>
-          <p class="hint">只列出曾經在群組發言的人。</p>`:empty('還沒有學生在這個群組發言。')}`;
+          <p class="hint">只列出這學期（W1 之後）在群組發言過的人。</p>`:empty('還沒有學生在這個群組發言。')}`;
     }catch(error){if(mine!==seq)return;main.removeAttribute('aria-busy');main.innerHTML=problem(error,'view');}
   },
   hand(){
@@ -255,8 +255,8 @@ const VIEW={
         <label class="f" for="week1">第一週（W1）從哪一週開始</label>
         <input class="t" type="date" id="week1" value="${S.info.week1||''}" aria-describedby="week1Help">
         <p class="hint" id="week1Help">${S.info.week1Auto
-          ?(S.info.week1Start?`自動判斷：這學期第一筆紀錄是 ${S.info.week1Start}（超過四週沒有紀錄就視為新學期）。不對的話選一個日期，會以那一週的星期一為 W1。`:'這堂課還沒有紀錄。')
-          :`你指定的。<button type="button" class="linkbtn" data-week1auto style="padding-left:0">改回自動判斷</button>`}</p>
+          ?(S.info.week1Start?`自動判斷：這學期第一筆紀錄是 ${S.info.week1Start}（超過四週沒有紀錄就視為新學期）。不對的話選一個日期，會以那一週的星期一為 W1。<br>W1 之前的紀錄和學生不會出現在課堂頁面，但仍保留在試算表裡。`:'這堂課還沒有紀錄。')
+          :`你指定的。W1 之前的紀錄和學生不會出現在課堂頁面，但仍保留在試算表裡。<button type="button" class="linkbtn" data-week1auto style="padding-left:0">改回自動判斷</button>`}</p>
         <button class="btn primary block" style="margin-top:16px" type="submit">儲存設定</button>
       </form>
       ${nickForm()}
@@ -302,7 +302,7 @@ async function fillHand(from,to){
         :empty(r.done.length?'名單上的每個人都上傳過檔案。':'名單上還沒有學生。')}
       <h2>已上傳</h2>${r.done.length?`<ul class="list">${r.done.map(p=>`<li><div class="grow"><b>${esc(p.who)}</b><div class="meta"><span>${esc(p.file)}</span><span class="num">${dayLabel(p.day)} ${p.time}</span></div></div><span class="tag ok">${ic('ok')}已交</span></li>`).join('')}</ul>`
         :empty('這段期間還沒有人上傳檔案。')}
-      <p class="hint">以「這段期間有沒有上傳任何檔案、圖片或影音」判斷，不檢查內容；只列出曾經在群組發言的人。</p>`;
+      <p class="hint">以「這段期間有沒有上傳任何檔案、圖片或影音」判斷，不檢查內容；只列出這學期（W1 之後）在群組發言過的人。</p>`;
   }catch(error){if(mine!==seq)return;box.removeAttribute('aria-busy');box.innerHTML=problem(error,'view');}
 }
 
