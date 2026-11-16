@@ -87,7 +87,7 @@ async function demoApi(action,b={}){
   const pub=({...r})=>r;
   switch(action){
     case 'init':return {course:DEMO_COURSES.find(c=>c[0]===demo.course)[1]===DEMO_COURSES[0][1]?demo.name:DEMO_COURSES.find(c=>c[0]===demo.course)[1],
-      nickname:demo.nick,teacher:demo.teacher,version:'示範',...(demo.teacher?{forward:demo.forward}:{})};
+      nickname:demo.nick,teacher:demo.teacher,version:'示範',week1:demo.week1||monday(taipei(-66)),...(demo.teacher?{forward:demo.forward,week1Auto:!demo.week1,week1Start:taipei(-66)}:{})};
     case 'me':{const m=FAKE.filter(r=>r.mine);return {messages:m.filter(r=>!r.upload).length,files:m.filter(r=>r.upload).length,last:{day:m[0].day,time:m[0].time}};}
     case 'file':return {name:FAKE.find(r=>r.row===b.row).text,url:''};
     case 'overview':{const t=FAKE.filter(r=>r.day===today);
@@ -100,7 +100,7 @@ async function demoApi(action,b={}){
     case 'courses':return DEMO_COURSES.map(c=>({code:c[0],name:c[0]==='a'?demo.name:c[1],current:c[0]===demo.course,last:{day:taipei(c[2]),time:c[3]}}));
     case 'nickname':if(String(b.name).trim().length<2)throw Object.assign(new Error('暱稱至少要兩個字。'),{code:'invalid'});{const old=demo.nick;demo.nick=b.name.trim();FAKE.forEach(r=>{if(r.mine)r.who=demo.nick;});DEMO_PEOPLE[0]=demo.nick;return {nickname:demo.nick,records:FAKE.filter(r=>r.mine).length*(old!==demo.nick),replies:0};}
     case 'poke':return {sent:true};
-    case 'saveSettings':if(b.name!=null)demo.name=b.name;if(b.forward!=null)demo.forward=b.forward;return {name:demo.name,forward:demo.forward};
+    case 'saveSettings':if(b.name!=null)demo.name=b.name;if(b.forward!=null)demo.forward=b.forward;if(b.week1!=null)demo.week1=b.week1&&monday(b.week1);return {name:demo.name,forward:demo.forward,...(b.week1!=null?{week1:demo.week1||monday(taipei(-66)),week1Auto:!demo.week1}:{})};
     case 'broadcast':return {sent:b.rows.length};
   }
   const q=(b.q||'').trim().toLowerCase(),size=5,start=b.offset||0,person=b.person!=null?DEMO_PEOPLE[b.person-3]:'';
@@ -119,6 +119,10 @@ const TABS={student:[['log','歷程','list'],['files','檔案','folder'],['me','
 const FORWARD=[[0,'即時'],[120,'每 2 小時'],[360,'每 6 小時'],[720,'每 12 小時'],[1440,'每天一次'],[-1,'暫停']];
 let seq=0;                       // a slow answer must not overwrite a newer screen
 const dayLabel=d=>d===today?'今天':d.slice(0,4)===today.slice(0,4)?d.slice(5):d;
+// Semester week: W1 is the week of info.week1 (a Monday), worked out by the server per class.
+const monday=d=>{const t=new Date(d+'T00:00:00Z');return new Date(t-((t.getUTCDay()+6)%7)*864e5).toISOString().slice(0,10);};
+const week=d=>{const w1=S.info&&S.info.week1;if(!w1||d<w1)return '';return 'W'+(Math.round((Date.parse(monday(d))-Date.parse(w1))/864e5/7)+1);};
+const dayWeek=d=>dayLabel(d)+(week(d)?`<span class="wk">${week(d)}</span>`:'');
 const when=t=>t?dayLabel(t.day)+' '+t.time:'—';
 
 function toast(text,icon='ok'){const t=$('toast');t.innerHTML=ic(icon)+`<span>${esc(text)}</span>`;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('on'),4000);}
@@ -147,7 +151,7 @@ function row(m){
 }
 function grouped(items,lastDay){
   let out='',day=lastDay||'';
-  items.forEach(m=>{if(m.day!==day){if(out)out+='</ul>';day=m.day;out+=`<div class="day">${dayLabel(day)}</div><ul class="list">`;}else if(!out)out+='<ul class="list">';out+=row(m);});
+  items.forEach(m=>{if(m.day!==day){if(out)out+='</ul>';day=m.day;out+=`<div class="day">${dayWeek(day)}</div><ul class="list">`;}else if(!out)out+='<ul class="list">';out+=row(m);});
   return out+(out?'</ul>':'');
 }
 const more=data=>data.next===null?'':`<button type="button" class="btn block" style="margin-top:16px" data-more="${data.next}">載入更早的紀錄</button>`;
@@ -233,7 +237,7 @@ const VIEW={
       ${S.range==='custom'?`<div class="card" style="display:flex;gap:12px;flex-wrap:wrap">
         <div class="grow"><label class="f" for="from" style="margin-top:0">從</label><input class="t" type="date" id="from" value="${from}" max="${today}"></div>
         <div class="grow"><label class="f" for="to" style="margin-top:0">到</label><input class="t" type="date" id="to" value="${to}" max="${today}"></div></div>`:
-        `<p class="hint">${dayLabel(from)}${from===to?'':' 到 '+dayLabel(to)}</p>`}
+        `<p class="hint">${dayWeek(from)}${from===to?'':' 到 '+dayWeek(to)}</p>`}
       <div id="hand" style="margin-top:16px"></div>`;
     fillHand(from,to);
   },
@@ -248,6 +252,11 @@ const VIEW={
         <label class="f" for="fwd">轉訊到管理中心</label>
         <select class="t" id="fwd">${FORWARD.map(([v,l])=>`<option value="${v}" ${v===S.info.forward?'selected':''}>${l}</option>`).join('')}
           ${FORWARD.some(f=>f[0]===S.info.forward)?'':`<option value="${S.info.forward}" selected disabled>每 ${S.info.forward} 分鐘（用指令設定的）</option>`}</select>
+        <label class="f" for="week1">第一週（W1）從哪一週開始</label>
+        <input class="t" type="date" id="week1" value="${S.info.week1||''}" aria-describedby="week1Help">
+        <p class="hint" id="week1Help">${S.info.week1Auto
+          ?(S.info.week1Start?`自動判斷：這學期第一筆紀錄是 ${S.info.week1Start}（超過四週沒有紀錄就視為新學期）。不對的話選一個日期，會以那一週的星期一為 W1。`:'這堂課還沒有紀錄。')
+          :`你指定的。<button type="button" class="linkbtn" data-week1auto style="padding-left:0">改回自動判斷</button>`}</p>
         <button class="btn primary block" style="margin-top:16px" type="submit">儲存設定</button>
       </form>
       ${nickForm()}
@@ -361,6 +370,7 @@ main.addEventListener('click',async e=>{
   else if('select' in d){S.select=!S.select;S.picked.clear();render();}
   else if('person' in d){S.person={id:+d.person,name:d.name};S.kind='all';S.q='';S.tab='log';render();}
   else if('cast' in d){castDialog();}
+  else if('week1auto' in d){busy(t,async()=>{try{const r=await api('saveSettings',{week1:''});S.info.week1=r.week1;S.info.week1Auto=r.week1Auto;render();toast('已改回自動判斷：W1 從 '+r.week1+' 那一週開始');}catch(error){toast(error.message,'alert');}});}
   else if('preview' in d){S.preview=true;S.tab='me';header();render();main.focus({preventScroll:true});}
   else if('retry' in d){d.retry==='boot'?boot():render();}
   else if('more' in d){
@@ -400,11 +410,13 @@ main.addEventListener('submit',e=>{
     const name=$('gname').value.trim(),forward=+$('fwd').value,change={};
     if(name!==S.info.course)change.name=name;
     if(forward!==S.info.forward)change.forward=forward;
+    const w1=$('week1').value;if(w1&&w1!==S.info.week1)change.week1=w1;
     if(!Object.keys(change).length)return toast('沒有需要儲存的變更');
     if(change.name!==undefined&&name.length<2)return fail('gnameErr','gname','群組名稱至少要兩個字。');
     busy(btn,async()=>{try{const r=await api('saveSettings',change);
         if(r.name!==undefined){S.info.course=r.name;$('gname').value=r.name;}if(r.forward!==undefined)S.info.forward=r.forward;
-        S.courses=null;header();clear('gnameErr','gname');toast('設定已儲存');}
+        if(r.week1!==undefined){S.info.week1=r.week1;S.info.week1Auto=r.week1Auto;}
+        S.courses=null;header();clear('gnameErr','gname');toast('設定已儲存');if(r.week1!==undefined)render();}
       catch(error){fail('gnameErr','gname',error.message);}});
   }
 });
