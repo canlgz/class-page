@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>課堂頁面</title>
+<!--
+  備份機器人的課堂頁面（LIFF），第一期：唯讀。歷程／檔案／我的。
+  資料全部來自 GAS 的 ?api=liff 接口（src/liffApi.js）；這個頁面本身不含任何 token。
+  config.js 未填、或網址帶 ?demo 時，以假資料示範，不連 LINE 也不連 GAS。
+-->
+<link rel="stylesheet" href="app.css">
+<script src="config.js"></script>
+</head>
+<body>
+<div class="demo" id="demo" role="note" hidden>示範模式・假資料</div>
+<header class="top"><h1><span id="course">課堂頁面</span><small id="who"></small></h1></header>
+<main id="main" tabindex="-1"></main>
+<nav class="tabs" id="tabs" aria-label="主要分頁" hidden></nav>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const P={
+  list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+  file:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+  image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5L5 20"/>',
+  video:'<rect x="3" y="5" width="14" height="14" rx="2"/><path d="M17 10l4-2v8l-4-2"/>',
+  audio:'<path d="M12 3v10a3 3 0 1 1-2-2.8V5l8-2v8a3 3 0 1 1-2-2.8"/>',
+  down:'<path d="M12 4v12M6 11l6 6 6-6M5 20h14"/>', ok:'<path d="M5 12l5 5 9-10"/>', x:'<path d="M6 6l12 12M18 6L6 18"/>',
+  inbox:'<path d="M3 13l3-8h12l3 8v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 13h5l1 3h6l1-3h5"/>',
+  alert:'<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/>'
+};
+const ic=(n,cls='i')=>`<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[n]||P.file}</svg>`;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $=id=>document.getElementById(id);
+const main=$('main');
+
+// ---------- where the data comes from ----------
+const CFG=window.BACKUP_BOT||{};
+const DEMO=new URLSearchParams(location.search).has('demo')||!CFG.liffId||!CFG.api;
+const auth={idToken:'',course:''};
+
+async function realApi(action,body={}){
+  const stop=new AbortController(),timer=setTimeout(()=>stop.abort(),25000);
+  let reply;
+  try{
+    // text/plain keeps this a "simple" request: GAS web apps cannot answer a CORS preflight.
+    const res=await fetch(CFG.api+'?api=liff',{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({...body,action,idToken:auth.idToken,course:auth.course}),signal:stop.signal,redirect:'follow'});
+    reply=await res.json();
+  }catch(error){throw Object.assign(new Error(error.name==='AbortError'?'等太久了，機器人沒有回應。':'連不上機器人，請檢查網路。'),{code:'network'});}
+  finally{clearTimeout(timer);}
+  if(!reply.ok)throw Object.assign(new Error(reply.message||'發生錯誤'),{code:reply.error});
+  return reply.data;
+}
+
+// Same contract as src/liffApi.js, over made-up rows.
+const FAKE=[
+ ['2026-11-16','10:42','林柏宇','file','第三組_訪談逐字稿.docx'],['2026-11-16','10:40','陳語彤','text','老師，我們第二組的簡報已經上傳了，再麻煩確認'],
+ ['2026-11-16','10:38','陳語彤','file','第二組_串流平台比較.pdf'],['2026-11-16','10:21','王子晴','image','圖片'],
+ ['2026-11-16','10:05','老師','text','今天各組請在下課前把訪談逐字稿或簡報傳到群組，機器人會備份。'],
+ ['2026-11-15','21:30','老師','text','不用逐句標，每段開頭標一次就可以。'],['2026-11-15','21:13','張家豪','text','請問逐字稿需要標時間碼嗎？'],
+ ['2026-11-15','18:02','李宜蓁','video','影片'],['2026-11-14','14:20','陳語彤','text','分享一篇講串流平台分潤的報導 https://example.com/streaming-revenue-share-2026'],
+ ['2026-11-14','14:05','黃品叡','image','圖片'],['2026-11-13','11:48','王子晴','file','第一組_企劃書v2.pdf'],['2026-11-13','11:30','林柏宇','text','第三組下週三可以先跟老師約時間討論嗎？'],
+].map((r,i,a)=>({row:9+a.length-i,day:r[0],time:r[1],who:r[2],type:r[3],text:r[4],upload:r[3]!=='text',mine:r[2]==='陳語彤'}));
+async function demoApi(action,b={}){
+  await new Promise(r=>setTimeout(r,600));
+  if(action==='init')return {course:'媒體產業研究',nickname:'陳語彤',teacher:false,version:'示範'};
+  if(action==='me'){const m=FAKE.filter(r=>r.mine);return {messages:m.filter(r=>!r.upload).length,files:m.filter(r=>r.upload).length,last:{day:m[0].day,time:m[0].time}};}
+  if(action==='file')return {name:FAKE.find(r=>r.row===b.row).text,url:''};
+  const q=(b.q||'').trim().toLowerCase(),size=5,start=b.offset||0;
+  const f=FAKE.filter(r=>(!b.mine||r.mine)&&(b.kind!=='text'||r.type==='text')&&(b.kind!=='upload'||r.upload)&&(b.kind!=='doc'||r.type==='file')
+    &&(b.kind!=='media'||(r.upload&&r.type!=='file'))&&(!q||(r.text+r.who).toLowerCase().includes(q)));
+  const items=f.slice(start,start+size);
+  return {total:f.length,items,next:start+items.length<f.length?start+items.length:null};
+}
+const api=DEMO?demoApi:realApi;
+
+// ---------- state ----------
+const S={tab:'log',q:'',kind:'all',fileKind:'upload',me:null};
+const TABS=[['log','歷程','list'],['files','檔案','folder'],['me','我的','user']];
+let seq=0;                       // a slow answer must not overwrite a newer screen
+const today=(()=>{const d=new Date(Date.now()+8*3600*1000);return d.toISOString().slice(0,10);})();
+const dayLabel=d=>d===today?'今天':d.slice(0,4)===today.slice(0,4)?d.slice(5):d;
+
+function toast(text,icon='ok'){const t=$('toast');t.innerHTML=ic(icon)+`<span>${esc(text)}</span>`;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('on'),4000);}
+function tabs(){$('tabs').innerHTML=TABS.map(([id,label,icon])=>`<button type="button" data-tab="${id}" ${id===S.tab?'aria-current="page"':''}>${ic(icon)}<span>${label}</span></button>`).join('');}
+function skeleton(target=main){target.setAttribute('aria-busy','true');target.innerHTML='<p class="sr">載入中</p>'+[56,56,56,56].map(h=>`<div class="sk" style="height:${h}px;margin-bottom:12px"></div>`).join('');}
+const chip=(group,value,label,cur)=>`<button type="button" class="chip" data-${group}="${value}" aria-pressed="${cur===value}">${label}</button>`;
+const empty=(text,action='')=>`<div class="empty">${ic('inbox')}<div>${text}</div>${action}</div>`;
+// A refusal the person cannot fix by retrying gets no retry button.
+function problem(error,retry){
+  const final=['not_member','no_course','not_configured','bad_token'].includes(error.code);
+  return `<div class="empty" role="alert">${ic('alert')}<div>${esc(error.message)}</div>${final?'':`<button type="button" class="btn" data-retry="${retry}">再試一次</button>`}</div>`;
+}
+
+function row(m,withButton){
+  const body=m.upload?`<div class="filebox">${ic(m.type)}<span>${esc(m.text)}</span></div>`:`<div class="text">${esc(m.text)}</div>`;
+  return `<li><div class="grow"><div class="meta"><b>${esc(m.who||'（未設定暱稱）')}</b><span class="num">${m.time}</span>${m.mine?'<span>我</span>':''}</div>${body}</div>
+    ${m.upload&&withButton?`<button type="button" class="btn" data-get="${m.row}" data-name="${esc(m.text)}">${ic('down')}取回</button>`:''}</li>`;
+}
+function grouped(items,lastDay){
+  let out='',day=lastDay||'';
+  items.forEach(m=>{if(m.day!==day){if(out)out+='</ul>';day=m.day;out+=`<div class="day">${dayLabel(day)}</div><ul class="list">`;}else if(!out)out+='<ul class="list">';out+=row(m,true);});
+  return out+(out?'</ul>':'');
+}
+
+// One paged list (歷程, 檔案, 我的紀錄 all use it). `params` is what the server filters by.
+async function fillList(box,params,emptyText){
+  const mine=++seq;skeleton(box);
+  try{
+    const data=await api('log',params);if(mine!==seq)return;
+    box.removeAttribute('aria-busy');
+    box.innerHTML=`<p class="hint" aria-live="polite">共 ${data.total} 則</p>`+(data.items.length?grouped(data.items):empty(emptyText))+more(data);
+    box.dataset.params=JSON.stringify(params);box.dataset.lastDay=data.items.length?data.items.at(-1).day:'';
+  }catch(error){if(mine!==seq)return;box.removeAttribute('aria-busy');box.innerHTML=problem(error,'list');}
+}
+const more=data=>data.next===null?'':`<button type="button" class="btn block" style="margin-top:16px" data-more="${data.next}">載入更早的紀錄</button>`;
+
+// ---------- screens ----------
+function render(){
+  tabs();window.scrollTo(0,0);
+  if(S.tab==='log'){
+    main.innerHTML=`<div class="search">${ic('search')}<label class="sr" for="q">搜尋訊息、檔名或姓名</label>
+      <input id="q" type="search" enterkeyhint="search" placeholder="搜尋訊息、檔名或姓名" value="${esc(S.q)}" autocomplete="off"></div>
+      <div class="chips">${chip('kind','all','全部',S.kind)}${chip('kind','text','文字',S.kind)}${chip('kind','upload','檔案與圖片',S.kind)}</div><div id="list"></div>`;
+    fillList($('list'),{q:S.q,kind:S.kind},S.q||S.kind!=='all'?'找不到符合的訊息。試試較短的關鍵字，或改選「全部」。':'這堂課還沒有紀錄。');
+  }else if(S.tab==='files'){
+    main.innerHTML=`<div class="chips">${chip('fkind','upload','全部',S.fileKind)}${chip('fkind','doc','文件',S.fileKind)}${chip('fkind','media','圖片與影音',S.fileKind)}</div>
+      <p class="hint">LINE 上已經過期的檔案，這裡也拿得回來。</p><div id="list" style="margin-top:12px"></div>`;
+    fillList($('list'),{kind:S.fileKind},'這個分類還沒有檔案。');
+  }else{
+    main.innerHTML=`<h2>我在這堂課的紀錄</h2><div id="stats"></div><div id="list" style="margin-top:16px"></div>`;
+    stats();fillList($('list'),{mine:true},'你在這堂課還沒有被備份到的訊息。在群組傳一則訊息後再回來看看。');
+  }
+}
+async function stats(){
+  const box=$('stats');box.innerHTML='<div class="sk" style="height:76px"></div>';
+  try{
+    const me=await api('me');if(!$('stats'))return;
+    box.innerHTML=`<div class="tiles"><div class="tile"><div class="k">訊息</div><div class="v">${me.messages} <small>則</small></div></div>
+      <div class="tile"><div class="k">上傳檔案</div><div class="v">${me.files} <small>個</small></div></div></div>
+      <p class="hint">${me.last?`最後一次被備份：${dayLabel(me.last.day)} ${me.last.time}。這裡看得到，就代表老師那邊也有紀錄。`:'還沒有紀錄。'}</p>`;
+  }catch(error){box.innerHTML=problem(error,'stats');}
+}
+
+// ---------- events ----------
+$('tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(b){S.tab=b.dataset.tab;render();main.focus({preventScroll:true});}});
+let deb;
+main.addEventListener('input',e=>{if(e.target.id!=='q')return;S.q=e.target.value;clearTimeout(deb);
+  deb=setTimeout(()=>fillList($('list'),{q:S.q,kind:S.kind},'找不到符合的訊息。試試較短的關鍵字，或改選「全部」。'),500);});
+main.addEventListener('click',async e=>{
+  const t=e.target.closest('button');if(!t)return;const d=t.dataset;
+  if('kind' in d){S.kind=d.kind;render();}
+  else if('fkind' in d){S.fileKind=d.fkind;render();}
+  else if('retry' in d){d.retry==='boot'?boot():d.retry==='stats'?stats():render();}
+  else if('more' in d){
+    const box=$('list'),params={...JSON.parse(box.dataset.params),offset:+d.more},label=t.innerHTML;
+    t.disabled=true;t.textContent='載入中…';
+    try{const data=await api('log',params);t.remove();
+      // Continue the day the previous page ended on instead of repeating its heading.
+      box.insertAdjacentHTML('beforeend',grouped(data.items,box.dataset.lastDay)+more(data));box.dataset.lastDay=data.items.at(-1).day;
+    }catch(error){t.disabled=false;t.innerHTML=label;toast(error.message,'alert');}
+  }
+  else if('get' in d){
+    const label=t.innerHTML;t.disabled=true;t.textContent='處理中…';
+    try{
+      const file=await api('file',{row:+d.get});
+      if(DEMO)toast('示範模式：正式版會開啟「'+d.name+'」');
+      else if(window.liff&&liff.isInClient())liff.openWindow({url:file.url,external:true});
+      else location.href=file.url;
+    }catch(error){toast(error.message,'alert');}
+    t.disabled=false;t.innerHTML=label;
+  }
+});
+
+// ---------- start ----------
+function loadSdk(){return new Promise((ok,fail)=>{const s=document.createElement('script');s.src='https://static.line-scdn.net/liff/edge/2/sdk.js';s.onload=ok;s.onerror=()=>fail(Object.assign(new Error('LINE 元件載入失敗，請檢查網路。'),{code:'network'}));document.head.append(s);});}
+async function boot(){
+  $('demo').hidden=!DEMO;skeleton();
+  try{
+    if(!DEMO){
+      if(!window.liff)await loadSdk();
+      await liff.init({liffId:CFG.liffId});
+      if(!liff.isLoggedIn()){liff.login({redirectUri:location.href});return;}
+      auth.idToken=liff.getIDToken();
+      auth.course=new URLSearchParams(location.search).get('c')||'';
+      if(!auth.course)throw Object.assign(new Error('請從課堂群組的「備份」選單開啟這個頁面。'),{code:'no_course'});
+    }
+    const info=await api('init');
+    $('course').textContent=info.course;document.title=info.course+'・課堂頁面';
+    $('who').textContent=(info.teacher?'老師':info.nickname||'尚未設定暱稱')+(info.teacher?'':'（你）');
+    main.removeAttribute('aria-busy');$('tabs').hidden=false;render();
+  }catch(error){
+    main.removeAttribute('aria-busy');
+    if(!error.code)error=Object.assign(new Error('無法開啟頁面：'+error.message),{code:'network'});
+    main.innerHTML=problem(error,'boot');
+  }
+}
+boot();
+</script>
+</body>
+</html>
