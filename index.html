@@ -16,6 +16,7 @@
 </head>
 <body>
 <div class="demo" id="demo" role="note" hidden>示範模式・假資料，不會真的傳送任何訊息</div>
+<div class="demo" id="preview" role="note" hidden>以學生身分預覽中：老師功能已關閉，資料是你自己的。學生看不到這個畫面。<button type="button" class="linkbtn" id="unpreview">回到老師畫面</button></div>
 <header class="top"><h1><span id="course">課堂頁面</span><small id="who"></small></h1></header>
 <main id="main" tabindex="-1"></main>
 <nav class="tabs" id="tabs" aria-label="主要分頁" hidden></nav>
@@ -76,15 +77,17 @@ const FAKE=[
  [-1,'21:30','老師','text','不用逐句標，每段開頭標一次就可以。'],[-1,'21:13','張家豪','text','請問逐字稿需要標時間碼嗎？'],
  [-1,'18:02','李宜蓁','video','影片'],[-2,'14:20','陳語彤','text','分享一篇講串流平台分潤的報導 https://example.com/streaming-revenue-share-2026'],
  [-2,'14:05','黃品叡','image','圖片'],[-3,'11:48','王子晴','file','第一組_企劃書v2.pdf'],[-3,'11:30','林柏宇','text','第三組下週三可以先跟老師約時間討論嗎？'],
-].map((r,i,a)=>({row:9+a.length-i,day:taipei(r[0]),time:r[1],who:r[2],type:r[3],text:r[4],upload:r[3]!=='text',mine:r[2]==='陳語彤'}));
-const demo={teacher:QUERY.get('demo')==='teacher',nick:'陳語彤',name:'媒體產業研究',forward:-1,course:'a'};
+].map((r,i,a)=>({row:9+a.length-i,day:taipei(r[0]),time:r[1],who:r[2],type:r[3],text:r[4],upload:r[3]!=='text',mine:r[2]===(QUERY.get('demo')==='teacher'?'老師':'陳語彤')}));
+const demo={teacher:QUERY.get('demo')==='teacher',nick:QUERY.get('demo')==='teacher'?'老師':'陳語彤',name:'媒體產業研究',forward:-1,course:'a'};
 const DEMO_COURSES=[['a','媒體產業研究',0,'10:42'],['b','數位敘事工作坊',-1,'16:05'],['c','傳播理論',-4,'09:30']];
 async function demoApi(action,b={}){
   await new Promise(r=>setTimeout(r,500));
+  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast'].includes(action))
+    throw Object.assign(new Error('這個功能只有老師能用。'),{code:'teacher_only'});
   const pub=({...r})=>r;
   switch(action){
     case 'init':return {course:DEMO_COURSES.find(c=>c[0]===demo.course)[1]===DEMO_COURSES[0][1]?demo.name:DEMO_COURSES.find(c=>c[0]===demo.course)[1],
-      nickname:demo.teacher?'':demo.nick,teacher:demo.teacher,version:'示範',...(demo.teacher?{forward:demo.forward}:{})};
+      nickname:demo.nick,teacher:demo.teacher,version:'示範',...(demo.teacher?{forward:demo.forward}:{})};
     case 'me':{const m=FAKE.filter(r=>r.mine);return {messages:m.filter(r=>!r.upload).length,files:m.filter(r=>r.upload).length,last:{day:m[0].day,time:m[0].time}};}
     case 'file':return {name:FAKE.find(r=>r.row===b.row).text,url:''};
     case 'overview':{const t=FAKE.filter(r=>r.day===today);
@@ -95,7 +98,7 @@ async function demoApi(action,b={}){
     case 'handin':{const done=[],missing=[];DEMO_PEOPLE.forEach((who,i)=>{const r=FAKE.find(x=>x.who===who&&x.upload&&x.day>=b.from&&x.day<=b.to);
       r?done.push({person:i+3,who,file:r.text,day:r.day,time:r.time}):missing.push({person:i+3,who});});return {from:b.from,to:b.to,done,missing};}
     case 'courses':return DEMO_COURSES.map(c=>({code:c[0],name:c[0]==='a'?demo.name:c[1],current:c[0]===demo.course,last:{day:taipei(c[2]),time:c[3]}}));
-    case 'nickname':if(String(b.name).trim().length<2)throw Object.assign(new Error('暱稱至少要兩個字。'),{code:'invalid'});demo.nick=b.name.trim();return {nickname:demo.nick};
+    case 'nickname':if(String(b.name).trim().length<2)throw Object.assign(new Error('暱稱至少要兩個字。'),{code:'invalid'});{const old=demo.nick;demo.nick=b.name.trim();FAKE.forEach(r=>{if(r.mine)r.who=demo.nick;});DEMO_PEOPLE[0]=demo.nick;return {nickname:demo.nick,records:FAKE.filter(r=>r.mine).length*(old!==demo.nick),replies:0};}
     case 'poke':return {sent:true};
     case 'saveSettings':if(b.name!=null)demo.name=b.name;if(b.forward!=null)demo.forward=b.forward;return {name:demo.name,forward:demo.forward};
     case 'broadcast':return {sent:b.rows.length};
@@ -106,10 +109,11 @@ async function demoApi(action,b={}){
   const items=f.slice(start,start+size).map(pub);
   return {total:f.length,items,next:start+items.length<f.length?start+items.length:null};
 }
-const api=DEMO?demoApi:realApi;
+// While the teacher previews the student view, the server applies the student rules too.
+const api=(action,body={})=>(DEMO?demoApi:realApi)(action,S.preview?{...body,asStudent:true}:body);
 
 // ---------- state ----------
-const S={tab:'log',q:'',kind:'all',fileKind:'upload',person:null,select:false,picked:new Map(),range:'this',from:'',to:'',info:null,courses:null};
+const S={preview:false,tab:'log',q:'',kind:'all',fileKind:'upload',person:null,select:false,picked:new Map(),range:'this',from:'',to:'',info:null,courses:null};
 const TABS={student:[['log','歷程','list'],['files','檔案','folder'],['me','我的','user']],
             teacher:[['home','總覽','chart'],['log','歷程','list'],['files','檔案','folder'],['hand','繳交','check2'],['set','設定','gear']]};
 const FORWARD=[[0,'即時'],[120,'每 2 小時'],[360,'每 6 小時'],[720,'每 12 小時'],[1440,'每天一次'],[-1,'暫停']];
@@ -118,9 +122,11 @@ const dayLabel=d=>d===today?'今天':d.slice(0,4)===today.slice(0,4)?d.slice(5):
 const when=t=>t?dayLabel(t.day)+' '+t.time:'—';
 
 function toast(text,icon='ok'){const t=$('toast');t.innerHTML=ic(icon)+`<span>${esc(text)}</span>`;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('on'),4000);}
+// The teacher may look at the student tabs; the server still knows it is the teacher.
+const asTeacher=()=>S.info.teacher&&!S.preview;
 function header(){$('course').textContent=S.info.course;document.title=S.info.course+'・課堂頁面';
-  $('who').textContent=S.info.teacher?'老師檢視':(S.info.nickname||'尚未設定暱稱')+'（你）';}
-function tabs(){$('tabs').innerHTML=TABS[S.info.teacher?'teacher':'student'].map(([id,label,icon])=>`<button type="button" data-tab="${id}" ${id===S.tab?'aria-current="page"':''}>${ic(icon)}<span>${label}</span></button>`).join('');}
+  $('who').textContent=asTeacher()?'老師檢視':(S.info.nickname||'尚未設定暱稱')+'（你）';$('preview').hidden=!S.preview;}
+function tabs(){$('tabs').innerHTML=TABS[asTeacher()?'teacher':'student'].map(([id,label,icon])=>`<button type="button" data-tab="${id}" ${id===S.tab?'aria-current="page"':''}>${ic(icon)}<span>${label}</span></button>`).join('');}
 function skeleton(target=main,heights=[56,56,56,56]){target.setAttribute('aria-busy','true');target.innerHTML='<p class="sr">載入中</p>'+heights.map(h=>`<div class="sk" style="height:${h}px;margin-bottom:12px"></div>`).join('');}
 const chip=(group,value,label,cur)=>`<button type="button" class="chip" data-${group}="${value}" aria-pressed="${cur===value}">${label}</button>`;
 const empty=(text,action='')=>`<div class="empty">${ic('inbox')}<div>${text}</div>${action}</div>`;
@@ -163,9 +169,17 @@ function actionbar(){
 }
 
 // ---------- screens ----------
+const nickForm=()=>`<h2>我的暱稱</h2>
+      <form class="card" id="nickForm" novalidate>
+        <label class="f" for="nick" style="margin-top:0">在這堂課顯示的名字</label>
+        <input class="t" id="nick" value="${esc(S.info.nickname)}" maxlength="20" autocomplete="nickname" aria-describedby="nickHelp">
+        <p class="hint" id="nickHelp">${asTeacher()?'學生在歷程裡看到的就是這個名字。':'建議用本名或學號加姓名，老師才認得出你。'}你在這堂課之前的紀錄也會一起改成新名字。</p>
+        <p class="err" id="nickErr" role="alert" hidden></p>
+        <button class="btn primary block" style="margin-top:12px" type="submit">儲存暱稱</button>
+      </form>`;
 const VIEW={
   log(){
-    const t=S.info.teacher;
+    const t=asTeacher();
     main.innerHTML=`<div class="search">${ic('search')}<label class="sr" for="q">搜尋訊息、檔名或姓名</label>
       <input id="q" type="search" enterkeyhint="search" placeholder="搜尋訊息、檔名或姓名" value="${esc(S.q)}" autocomplete="off"></div>
       <div class="chips">${chip('kind','all','全部',S.kind)}${chip('kind','text','文字',S.kind)}${chip('kind','upload','檔案與圖片',S.kind)}
@@ -180,14 +194,7 @@ const VIEW={
   },
   me(){
     main.innerHTML=`<h2>我在這堂課的紀錄</h2><div id="stats"></div><div id="list" style="margin-top:16px"></div>
-      <h2>我的暱稱</h2>
-      <form class="card" id="nickForm" novalidate>
-        <label class="f" for="nick" style="margin-top:0">在這堂課顯示的名字</label>
-        <input class="t" id="nick" value="${esc(S.info.nickname)}" maxlength="20" autocomplete="nickname" aria-describedby="nickHelp">
-        <p class="hint" id="nickHelp">建議用本名或學號加姓名，老師才認得出你。之後的訊息會用新名字，之前的紀錄不變。</p>
-        <p class="err" id="nickErr" role="alert" hidden></p>
-        <button class="btn primary block" style="margin-top:12px" type="submit">儲存暱稱</button>
-      </form>
+      ${nickForm()}
       <h2>戳戳老師</h2>
       <form class="card" id="pokeForm" novalidate>
         <label class="f" for="poke" style="margin-top:0">私下傳給老師的短訊</label>
@@ -243,6 +250,10 @@ const VIEW={
           ${FORWARD.some(f=>f[0]===S.info.forward)?'':`<option value="${S.info.forward}" selected disabled>每 ${S.info.forward} 分鐘（用指令設定的）</option>`}</select>
         <button class="btn primary block" style="margin-top:16px" type="submit">儲存設定</button>
       </form>
+      ${nickForm()}
+      <h2>學生看到的畫面</h2>
+      <div class="card"><p class="hint" style="margin-top:0">用學生的權限打開「歷程／檔案／我的」：老師功能會被拒絕，看得到的範圍和學生一樣。只有你的手機會看到，群組裡不會出現任何訊息。<br>注意：在這裡改暱稱，改的是你自己在這堂課的名字（學生在歷程裡會看到）；戳戳會私訊給你自己。</p>
+        <button type="button" class="btn block" style="margin-top:12px" data-preview>預覽學生畫面</button></div>
       <h2>系統</h2><div class="card"><span class="num">備份機器人 ${esc(S.info.version)}</span>
         <p class="hint">詳細狀態請在和機器人的私聊點狀態列左側，或輸入 //狀態。</p></div>`;
     const box=$('courses');skeleton(box,[56,56]);
@@ -350,6 +361,7 @@ main.addEventListener('click',async e=>{
   else if('select' in d){S.select=!S.select;S.picked.clear();render();}
   else if('person' in d){S.person={id:+d.person,name:d.name};S.kind='all';S.q='';S.tab='log';render();}
   else if('cast' in d){castDialog();}
+  else if('preview' in d){S.preview=true;S.tab='me';header();render();main.focus({preventScroll:true});}
   else if('retry' in d){d.retry==='boot'?boot():render();}
   else if('more' in d){
     const box=$('list'),params={...JSON.parse(box.dataset.params),offset:+d.more},label=t.innerHTML;
@@ -377,7 +389,7 @@ main.addEventListener('submit',e=>{
   if(form.id==='nickForm'){
     const v=$('nick').value.trim();
     if(v.length<2)return fail('nickErr','nick','暱稱至少要兩個字。');
-    busy(btn,async()=>{try{const r=await api('nickname',{name:v});S.info.nickname=r.nickname;header();clear('nickErr','nick');toast('暱稱已改為「'+r.nickname+'」');}
+    busy(btn,async()=>{try{const r=await api('nickname',{name:v});S.info.nickname=r.nickname;header();clear('nickErr','nick');toast('暱稱已改為「'+r.nickname+'」'+(r.records?'，之前的 '+r.records+' 則紀錄也一併更新':''));}
       catch(error){fail('nickErr','nick',error.message);}});
   }else if(form.id==='pokeForm'){
     const v=$('poke').value.trim();
@@ -397,6 +409,8 @@ main.addEventListener('submit',e=>{
   }
 });
 
+$('unpreview').addEventListener('click',()=>{S.preview=false;S.tab='set';header();render();main.focus({preventScroll:true});});
+
 // ---------- start ----------
 function loadSdk(){return new Promise((ok,fail)=>{const s=document.createElement('script');s.src='https://static.line-scdn.net/liff/edge/2/sdk.js';s.onload=ok;s.onerror=()=>fail(Object.assign(new Error('LINE 元件載入失敗，請檢查網路。'),{code:'network'}));document.head.append(s);});}
 async function boot(tab){
@@ -411,7 +425,9 @@ async function boot(tab){
       if(!auth.course)throw Object.assign(new Error('請從課堂群組的「備份」選單開啟這個頁面。'),{code:'no_course'});
     }
     S.info=await api('init');
-    S.tab=tab||(S.info.teacher?'home':'log');
+    // ?tab=me from the menu's nickname line; only a tab this person has.
+    const asked=QUERY.get('tab'),own=TABS[S.info.teacher?'teacher':'student'].map(t=>t[0]);
+    S.tab=tab||(own.includes(asked)?asked:S.info.teacher?'home':'log');
     header();main.removeAttribute('aria-busy');$('tabs').hidden=false;render();
   }catch(error){
     main.removeAttribute('aria-busy');$('tabs').hidden=true;
