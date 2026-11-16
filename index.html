@@ -438,9 +438,12 @@ async function boot(tab){
     }
     S.info=await api('init');
     // ?tab=me from the menu's nickname line; only a tab this person has.
+    // The teacher has no 我的 tab: their nickname is in 設定, so ?tab=me opens it there.
     const asked=QUERY.get('tab'),own=TABS[S.info.teacher?'teacher':'student'].map(t=>t[0]);
-    S.tab=tab||(own.includes(asked)?asked:S.info.teacher?'home':'log');
+    const toNick=!tab&&asked==='me'&&S.info.teacher;
+    S.tab=tab||(toNick?'set':own.includes(asked)?asked:S.info.teacher?'home':'log');
     header();main.removeAttribute('aria-busy');$('tabs').hidden=false;render();
+    if(toNick){const f=$('nickForm');f.scrollIntoView({block:'center'});$('nick').focus({preventScroll:true});}
   }catch(error){
     main.removeAttribute('aria-busy');$('tabs').hidden=true;
     if(!error.code)error=Object.assign(new Error('無法開啟頁面：'+error.message),{code:'network'});
