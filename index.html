@@ -39,7 +39,11 @@ const P={
   down:'<path d="M12 4v12M6 11l6 6 6-6M5 20h14"/>', ok:'<path d="M5 12l5 5 9-10"/>', x:'<path d="M6 6l12 12M18 6L6 18"/>',
   send:'<path d="M21 3L10 14M21 3l-7 18-4-7-7-4z"/>',
   inbox:'<path d="M3 13l3-8h12l3 8v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 13h5l1 3h6l1-3h5"/>',
-  alert:'<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/>'
+  alert:'<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/>',
+  pin:'<path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z"/><circle cx="12" cy="11" r="2"/>',
+  dice:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h.01M15 9h.01M12 12h.01M9 15h.01M15 15h.01"/>',
+  edit:'<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>'
 };
 const ic=(n,cls='i')=>`<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[n]||P.file}</svg>`;
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -102,6 +106,7 @@ async function demoApi(action,b={}){
     case 'poke':return {sent:true};
     case 'saveSettings':if(b.name!=null)demo.name=b.name;if(b.forward!=null)demo.forward=b.forward;if(b.week1!=null)demo.week1=b.week1&&monday(b.week1);return {name:demo.name,forward:demo.forward,...(b.week1!=null?{week1:demo.week1||monday(taipei(-66)),week1Auto:!demo.week1}:{})};
     case 'broadcast':return {sent:b.rows.length};
+    default:if(typeof demoRoll==='function'){const r=demoRoll(action,b);if(r!==undefined)return r;}
   }
   const q=(b.q||'').trim().toLowerCase(),size=5,start=b.offset||0,person=b.person!=null?DEMO_PEOPLE[b.person-3]:'';
   const f=FAKE.filter(r=>(!b.mine||r.mine)&&(!person||r.who===person)&&(b.kind!=='text'||r.type==='text')&&(b.kind!=='upload'||r.upload)&&(b.kind!=='doc'||r.type==='file')
@@ -114,8 +119,9 @@ const api=(action,body={})=>(DEMO?demoApi:realApi)(action,S.preview?{...body,asS
 
 // ---------- state ----------
 const S={preview:false,tab:'log',q:'',kind:'all',fileKind:'upload',person:null,select:false,picked:new Map(),range:'this',from:'',to:'',info:null,courses:null};
-const TABS={student:[['log','歷程','list'],['files','檔案','folder'],['me','我的','user']],
-            teacher:[['home','總覽','chart'],['log','歷程','list'],['files','檔案','folder'],['hand','繳交','check2'],['set','設定','gear']]};
+// Five tabs at most: the teacher finds files through 歷程's 檔案與圖片 filter.
+const TABS={student:[['log','歷程','list'],['files','檔案','folder'],['roll','點名','pin'],['me','我的','user']],
+            teacher:[['home','總覽','chart'],['log','歷程','list'],['roll','點名','pin'],['hand','繳交','check2'],['set','設定','gear']]};
 const FORWARD=[[0,'即時'],[120,'每 2 小時'],[360,'每 6 小時'],[720,'每 12 小時'],[1440,'每天一次'],[-1,'暫停']];
 let seq=0;                       // a slow answer must not overwrite a newer screen
 const dayLabel=d=>d===today?'今天':d.slice(0,4)===today.slice(0,4)?d.slice(5):d;
@@ -273,7 +279,7 @@ const VIEW={
     }catch(error){box.removeAttribute('aria-busy');box.innerHTML=problem(error,'view');}
   }
 };
-function render(){tabs();window.scrollTo(0,0);const old=document.querySelector('.actionbar');if(old)old.remove();VIEW[S.tab]();}
+function render(){if(typeof rollLeave==='function')rollLeave();tabs();window.scrollTo(0,0);const old=document.querySelector('.actionbar');if(old)old.remove();VIEW[S.tab]();}
 
 async function stats(){
   const box=$('stats');box.innerHTML='<div class="sk" style="height:76px"></div>';
@@ -450,7 +456,8 @@ async function boot(tab){
     main.innerHTML=problem(error,'boot');
   }
 }
-boot();
 </script>
+<script src="roll.js"></script>
+<script>boot();</script>
 </body>
 </html>
