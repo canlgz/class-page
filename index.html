@@ -5,31 +5,38 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>課堂頁面</title>
 <!--
-  備份機器人的課堂頁面（LIFF），第一期：唯讀。歷程／檔案／我的。
-  資料全部來自 GAS 的 ?api=liff 接口（src/liffApi.js）；這個頁面本身不含任何 token。
-  config.js 未填、或網址帶 ?demo 時，以假資料示範，不連 LINE 也不連 GAS。
+  備份機器人的課堂頁面（LIFF）。
+  學生：歷程／檔案／我的（含改暱稱、戳戳老師）。老師：總覽／歷程（可廣播）／檔案／繳交／設定。
+  資料全部來自 GAS 的 ?api=liff 接口（src/liffApi.js、src/liffActions.js）；這個頁面本身不含任何 token，
+  誰是老師、誰能看什麼都由後端決定。
+  config.js 未填、或網址帶 ?demo（老師版：?demo=teacher）時，以假資料示範，不連 LINE 也不連 GAS。
 -->
 <link rel="stylesheet" href="app.css">
 <script src="config.js"></script>
 </head>
 <body>
-<div class="demo" id="demo" role="note" hidden>示範模式・假資料</div>
+<div class="demo" id="demo" role="note" hidden>示範模式・假資料，不會真的傳送任何訊息</div>
 <header class="top"><h1><span id="course">課堂頁面</span><small id="who"></small></h1></header>
 <main id="main" tabindex="-1"></main>
 <nav class="tabs" id="tabs" aria-label="主要分頁" hidden></nav>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div id="overlay"></div>
 
 <script>
 const P={
   list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  chart:'<path d="M3 3v18h18"/><path d="M8 17v-5M13 17V8M18 17v-9"/>',
+  check2:'<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/>',
   search:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
   file:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
   image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5L5 20"/>',
   video:'<rect x="3" y="5" width="14" height="14" rx="2"/><path d="M17 10l4-2v8l-4-2"/>',
-  audio:'<path d="M12 3v10a3 3 0 1 1-2-2.8V5l8-2v8a3 3 0 1 1-2-2.8"/>',
+  audio:'<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>',
   down:'<path d="M12 4v12M6 11l6 6 6-6M5 20h14"/>', ok:'<path d="M5 12l5 5 9-10"/>', x:'<path d="M6 6l12 12M18 6L6 18"/>',
+  send:'<path d="M21 3L10 14M21 3l-7 18-4-7-7-4z"/>',
   inbox:'<path d="M3 13l3-8h12l3 8v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 13h5l1 3h6l1-3h5"/>',
   alert:'<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/>'
 };
@@ -40,7 +47,8 @@ const main=$('main');
 
 // ---------- where the data comes from ----------
 const CFG=window.BACKUP_BOT||{};
-const DEMO=new URLSearchParams(location.search).has('demo')||!CFG.liffId||!CFG.api;
+const QUERY=new URLSearchParams(location.search);
+const DEMO=QUERY.has('demo')||!CFG.liffId||!CFG.api;
 const auth={idToken:'',course:''};
 
 async function realApi(action,body={}){
@@ -57,58 +65,86 @@ async function realApi(action,body={}){
   return reply.data;
 }
 
-// Same contract as src/liffApi.js, over made-up rows.
+// ---------- demo: the same contract as the server, over made-up rows ----------
+const taipei=(offset=0)=>new Date(Date.now()+8*3600e3+offset*864e5).toISOString().slice(0,10);
+const today=taipei();
+const DEMO_PEOPLE=['陳語彤','林柏宇','王子晴','張家豪','李宜蓁','黃品叡'];
 const FAKE=[
- ['2026-11-16','10:42','林柏宇','file','第三組_訪談逐字稿.docx'],['2026-11-16','10:40','陳語彤','text','老師，我們第二組的簡報已經上傳了，再麻煩確認'],
- ['2026-11-16','10:38','陳語彤','file','第二組_串流平台比較.pdf'],['2026-11-16','10:21','王子晴','image','圖片'],
- ['2026-11-16','10:05','老師','text','今天各組請在下課前把訪談逐字稿或簡報傳到群組，機器人會備份。'],
- ['2026-11-15','21:30','老師','text','不用逐句標，每段開頭標一次就可以。'],['2026-11-15','21:13','張家豪','text','請問逐字稿需要標時間碼嗎？'],
- ['2026-11-15','18:02','李宜蓁','video','影片'],['2026-11-14','14:20','陳語彤','text','分享一篇講串流平台分潤的報導 https://example.com/streaming-revenue-share-2026'],
- ['2026-11-14','14:05','黃品叡','image','圖片'],['2026-11-13','11:48','王子晴','file','第一組_企劃書v2.pdf'],['2026-11-13','11:30','林柏宇','text','第三組下週三可以先跟老師約時間討論嗎？'],
-].map((r,i,a)=>({row:9+a.length-i,day:r[0],time:r[1],who:r[2],type:r[3],text:r[4],upload:r[3]!=='text',mine:r[2]==='陳語彤'}));
+ [0,'10:42','林柏宇','file','第三組_訪談逐字稿.docx'],[0,'10:40','陳語彤','text','老師，我們第二組的簡報已經上傳了，再麻煩確認'],
+ [0,'10:38','陳語彤','file','第二組_串流平台比較.pdf'],[0,'10:21','王子晴','image','圖片'],
+ [0,'10:05','老師','text','今天各組請在下課前把訪談逐字稿或簡報傳到群組，機器人會備份。'],
+ [-1,'21:30','老師','text','不用逐句標，每段開頭標一次就可以。'],[-1,'21:13','張家豪','text','請問逐字稿需要標時間碼嗎？'],
+ [-1,'18:02','李宜蓁','video','影片'],[-2,'14:20','陳語彤','text','分享一篇講串流平台分潤的報導 https://example.com/streaming-revenue-share-2026'],
+ [-2,'14:05','黃品叡','image','圖片'],[-3,'11:48','王子晴','file','第一組_企劃書v2.pdf'],[-3,'11:30','林柏宇','text','第三組下週三可以先跟老師約時間討論嗎？'],
+].map((r,i,a)=>({row:9+a.length-i,day:taipei(r[0]),time:r[1],who:r[2],type:r[3],text:r[4],upload:r[3]!=='text',mine:r[2]==='陳語彤'}));
+const demo={teacher:QUERY.get('demo')==='teacher',nick:'陳語彤',name:'媒體產業研究',forward:-1,course:'a'};
+const DEMO_COURSES=[['a','媒體產業研究',0,'10:42'],['b','數位敘事工作坊',-1,'16:05'],['c','傳播理論',-4,'09:30']];
 async function demoApi(action,b={}){
-  await new Promise(r=>setTimeout(r,600));
-  if(action==='init')return {course:'媒體產業研究',nickname:'陳語彤',teacher:false,version:'示範'};
-  if(action==='me'){const m=FAKE.filter(r=>r.mine);return {messages:m.filter(r=>!r.upload).length,files:m.filter(r=>r.upload).length,last:{day:m[0].day,time:m[0].time}};}
-  if(action==='file')return {name:FAKE.find(r=>r.row===b.row).text,url:''};
-  const q=(b.q||'').trim().toLowerCase(),size=5,start=b.offset||0;
-  const f=FAKE.filter(r=>(!b.mine||r.mine)&&(b.kind!=='text'||r.type==='text')&&(b.kind!=='upload'||r.upload)&&(b.kind!=='doc'||r.type==='file')
+  await new Promise(r=>setTimeout(r,500));
+  const pub=({...r})=>r;
+  switch(action){
+    case 'init':return {course:DEMO_COURSES.find(c=>c[0]===demo.course)[1]===DEMO_COURSES[0][1]?demo.name:DEMO_COURSES.find(c=>c[0]===demo.course)[1],
+      nickname:demo.teacher?'':demo.nick,teacher:demo.teacher,version:'示範',...(demo.teacher?{forward:demo.forward}:{})};
+    case 'me':{const m=FAKE.filter(r=>r.mine);return {messages:m.filter(r=>!r.upload).length,files:m.filter(r=>r.upload).length,last:{day:m[0].day,time:m[0].time}};}
+    case 'file':return {name:FAKE.find(r=>r.row===b.row).text,url:''};
+    case 'overview':{const t=FAKE.filter(r=>r.day===today);
+      return {today:{messages:t.filter(r=>!r.upload).length,uploads:t.filter(r=>r.upload).length,people:new Set(t.map(r=>r.who)).size,last:t[0].time},
+        week:[-6,-5,-4,-3,-2,-1,0].map(d=>({day:taipei(d),count:FAKE.filter(r=>r.day===taipei(d)).length})),
+        roster:DEMO_PEOPLE.map((who,i)=>{const a=FAKE.filter(r=>r.who===who);return {person:i+3,who,messages:a.filter(r=>!r.upload).length,files:a.filter(r=>r.upload).length,last:a[0]?{day:a[0].day,time:a[0].time}:null};})
+          .sort((x,y)=>y.messages+y.files-x.messages-x.files)};}
+    case 'handin':{const done=[],missing=[];DEMO_PEOPLE.forEach((who,i)=>{const r=FAKE.find(x=>x.who===who&&x.upload&&x.day>=b.from&&x.day<=b.to);
+      r?done.push({person:i+3,who,file:r.text,day:r.day,time:r.time}):missing.push({person:i+3,who});});return {from:b.from,to:b.to,done,missing};}
+    case 'courses':return DEMO_COURSES.map(c=>({code:c[0],name:c[0]==='a'?demo.name:c[1],current:c[0]===demo.course,last:{day:taipei(c[2]),time:c[3]}}));
+    case 'nickname':if(String(b.name).trim().length<2)throw Object.assign(new Error('暱稱至少要兩個字。'),{code:'invalid'});demo.nick=b.name.trim();return {nickname:demo.nick};
+    case 'poke':return {sent:true};
+    case 'saveSettings':if(b.name!=null)demo.name=b.name;if(b.forward!=null)demo.forward=b.forward;return {name:demo.name,forward:demo.forward};
+    case 'broadcast':return {sent:b.rows.length};
+  }
+  const q=(b.q||'').trim().toLowerCase(),size=5,start=b.offset||0,person=b.person!=null?DEMO_PEOPLE[b.person-3]:'';
+  const f=FAKE.filter(r=>(!b.mine||r.mine)&&(!person||r.who===person)&&(b.kind!=='text'||r.type==='text')&&(b.kind!=='upload'||r.upload)&&(b.kind!=='doc'||r.type==='file')
     &&(b.kind!=='media'||(r.upload&&r.type!=='file'))&&(!q||(r.text+r.who).toLowerCase().includes(q)));
-  const items=f.slice(start,start+size);
+  const items=f.slice(start,start+size).map(pub);
   return {total:f.length,items,next:start+items.length<f.length?start+items.length:null};
 }
 const api=DEMO?demoApi:realApi;
 
 // ---------- state ----------
-const S={tab:'log',q:'',kind:'all',fileKind:'upload',me:null};
-const TABS=[['log','歷程','list'],['files','檔案','folder'],['me','我的','user']];
+const S={tab:'log',q:'',kind:'all',fileKind:'upload',person:null,select:false,picked:new Map(),range:'this',from:'',to:'',info:null,courses:null};
+const TABS={student:[['log','歷程','list'],['files','檔案','folder'],['me','我的','user']],
+            teacher:[['home','總覽','chart'],['log','歷程','list'],['files','檔案','folder'],['hand','繳交','check2'],['set','設定','gear']]};
+const FORWARD=[[0,'即時'],[120,'每 2 小時'],[360,'每 6 小時'],[720,'每 12 小時'],[1440,'每天一次'],[-1,'暫停']];
 let seq=0;                       // a slow answer must not overwrite a newer screen
-const today=(()=>{const d=new Date(Date.now()+8*3600*1000);return d.toISOString().slice(0,10);})();
 const dayLabel=d=>d===today?'今天':d.slice(0,4)===today.slice(0,4)?d.slice(5):d;
+const when=t=>t?dayLabel(t.day)+' '+t.time:'—';
 
 function toast(text,icon='ok'){const t=$('toast');t.innerHTML=ic(icon)+`<span>${esc(text)}</span>`;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('on'),4000);}
-function tabs(){$('tabs').innerHTML=TABS.map(([id,label,icon])=>`<button type="button" data-tab="${id}" ${id===S.tab?'aria-current="page"':''}>${ic(icon)}<span>${label}</span></button>`).join('');}
-function skeleton(target=main){target.setAttribute('aria-busy','true');target.innerHTML='<p class="sr">載入中</p>'+[56,56,56,56].map(h=>`<div class="sk" style="height:${h}px;margin-bottom:12px"></div>`).join('');}
+function header(){$('course').textContent=S.info.course;document.title=S.info.course+'・課堂頁面';
+  $('who').textContent=S.info.teacher?'老師檢視':(S.info.nickname||'尚未設定暱稱')+'（你）';}
+function tabs(){$('tabs').innerHTML=TABS[S.info.teacher?'teacher':'student'].map(([id,label,icon])=>`<button type="button" data-tab="${id}" ${id===S.tab?'aria-current="page"':''}>${ic(icon)}<span>${label}</span></button>`).join('');}
+function skeleton(target=main,heights=[56,56,56,56]){target.setAttribute('aria-busy','true');target.innerHTML='<p class="sr">載入中</p>'+heights.map(h=>`<div class="sk" style="height:${h}px;margin-bottom:12px"></div>`).join('');}
 const chip=(group,value,label,cur)=>`<button type="button" class="chip" data-${group}="${value}" aria-pressed="${cur===value}">${label}</button>`;
 const empty=(text,action='')=>`<div class="empty">${ic('inbox')}<div>${text}</div>${action}</div>`;
 // A refusal the person cannot fix by retrying gets no retry button.
 function problem(error,retry){
-  const final=['not_member','no_course','not_configured','bad_token'].includes(error.code);
+  const final=['not_member','no_course','not_configured','bad_token','not_open','teacher_only'].includes(error.code);
   return `<div class="empty" role="alert">${ic('alert')}<div>${esc(error.message)}</div>${final?'':`<button type="button" class="btn" data-retry="${retry}">再試一次</button>`}</div>`;
 }
+// Runs a slow action from a button: locks it, shows progress, restores it.
+async function busy(btn,work){const label=btn.innerHTML;btn.disabled=true;btn.textContent='處理中…';try{return await work();}finally{btn.disabled=false;btn.innerHTML=label;}}
 
-function row(m,withButton){
+// ---------- lists (歷程, 檔案, 我的紀錄) ----------
+function row(m){
   const body=m.upload?`<div class="filebox">${ic(m.type)}<span>${esc(m.text)}</span></div>`:`<div class="text">${esc(m.text)}</div>`;
-  return `<li><div class="grow"><div class="meta"><b>${esc(m.who||'（未設定暱稱）')}</b><span class="num">${m.time}</span>${m.mine?'<span>我</span>':''}</div>${body}</div>
-    ${m.upload&&withButton?`<button type="button" class="btn" data-get="${m.row}" data-name="${esc(m.text)}">${ic('down')}取回</button>`:''}</li>`;
+  const box=S.select?`<input class="check" type="checkbox" data-pick="${m.row}" data-label="${esc(m.who+'：'+m.text)}" ${S.picked.has(m.row)?'checked':''} aria-label="選取 ${esc(m.who)} ${m.time} 的訊息">`:'';
+  return `<li>${box}<div class="grow"><div class="meta"><b>${esc(m.who||'（未設定暱稱）')}</b><span class="num">${m.time}</span>${m.mine?'<span>我</span>':''}</div>${body}</div>
+    ${m.upload&&!S.select?`<button type="button" class="btn" data-get="${m.row}" data-name="${esc(m.text)}">${ic('down')}取回</button>`:''}</li>`;
 }
 function grouped(items,lastDay){
   let out='',day=lastDay||'';
-  items.forEach(m=>{if(m.day!==day){if(out)out+='</ul>';day=m.day;out+=`<div class="day">${dayLabel(day)}</div><ul class="list">`;}else if(!out)out+='<ul class="list">';out+=row(m,true);});
+  items.forEach(m=>{if(m.day!==day){if(out)out+='</ul>';day=m.day;out+=`<div class="day">${dayLabel(day)}</div><ul class="list">`;}else if(!out)out+='<ul class="list">';out+=row(m);});
   return out+(out?'</ul>':'');
 }
-
-// One paged list (歷程, 檔案, 我的紀錄 all use it). `params` is what the server filters by.
+const more=data=>data.next===null?'':`<button type="button" class="btn block" style="margin-top:16px" data-more="${data.next}">載入更早的紀錄</button>`;
 async function fillList(box,params,emptyText){
   const mine=++seq;skeleton(box);
   try{
@@ -116,47 +152,205 @@ async function fillList(box,params,emptyText){
     box.removeAttribute('aria-busy');
     box.innerHTML=`<p class="hint" aria-live="polite">共 ${data.total} 則</p>`+(data.items.length?grouped(data.items):empty(emptyText))+more(data);
     box.dataset.params=JSON.stringify(params);box.dataset.lastDay=data.items.length?data.items.at(-1).day:'';
-  }catch(error){if(mine!==seq)return;box.removeAttribute('aria-busy');box.innerHTML=problem(error,'list');}
+  }catch(error){if(mine!==seq)return;box.removeAttribute('aria-busy');box.innerHTML=problem(error,'view');}
 }
-const more=data=>data.next===null?'':`<button type="button" class="btn block" style="margin-top:16px" data-more="${data.next}">載入更早的紀錄</button>`;
+const logParams=()=>({q:S.q,kind:S.kind,...(S.person?{person:S.person.id}:{})});
+const LOG_EMPTY='找不到符合的訊息。試試較短的關鍵字，或清除篩選。';
+function actionbar(){
+  const old=document.querySelector('.actionbar');if(old)old.remove();
+  if(S.tab!=='log'||!S.select)return;
+  main.insertAdjacentHTML('beforeend',`<div class="actionbar"><span>已選 ${S.picked.size} 則（最多 5 則）</span><button type="button" class="btn primary" data-cast ${S.picked.size?'':'disabled'}>${ic('send')}廣播</button></div>`);
+}
 
 // ---------- screens ----------
-function render(){
-  tabs();window.scrollTo(0,0);
-  if(S.tab==='log'){
+const VIEW={
+  log(){
+    const t=S.info.teacher;
     main.innerHTML=`<div class="search">${ic('search')}<label class="sr" for="q">搜尋訊息、檔名或姓名</label>
       <input id="q" type="search" enterkeyhint="search" placeholder="搜尋訊息、檔名或姓名" value="${esc(S.q)}" autocomplete="off"></div>
-      <div class="chips">${chip('kind','all','全部',S.kind)}${chip('kind','text','文字',S.kind)}${chip('kind','upload','檔案與圖片',S.kind)}</div><div id="list"></div>`;
-    fillList($('list'),{q:S.q,kind:S.kind},S.q||S.kind!=='all'?'找不到符合的訊息。試試較短的關鍵字，或改選「全部」。':'這堂課還沒有紀錄。');
-  }else if(S.tab==='files'){
+      <div class="chips">${chip('kind','all','全部',S.kind)}${chip('kind','text','文字',S.kind)}${chip('kind','upload','檔案與圖片',S.kind)}
+        ${S.person?`<button type="button" class="chip" data-unperson aria-pressed="true">${esc(S.person.name)}${ic('x')}<span class="sr">取消只看此人</span></button>`:''}
+        ${t?`<button type="button" class="chip" data-select aria-pressed="${S.select}">${S.select?'取消選取':'選取訊息廣播'}</button>`:''}</div><div id="list"></div>`;
+    fillList($('list'),logParams(),S.q||S.kind!=='all'||S.person?LOG_EMPTY:'這堂課還沒有紀錄。');actionbar();
+  },
+  files(){
     main.innerHTML=`<div class="chips">${chip('fkind','upload','全部',S.fileKind)}${chip('fkind','doc','文件',S.fileKind)}${chip('fkind','media','圖片與影音',S.fileKind)}</div>
       <p class="hint">LINE 上已經過期的檔案，這裡也拿得回來。</p><div id="list" style="margin-top:12px"></div>`;
     fillList($('list'),{kind:S.fileKind},'這個分類還沒有檔案。');
-  }else{
-    main.innerHTML=`<h2>我在這堂課的紀錄</h2><div id="stats"></div><div id="list" style="margin-top:16px"></div>`;
+  },
+  me(){
+    main.innerHTML=`<h2>我在這堂課的紀錄</h2><div id="stats"></div><div id="list" style="margin-top:16px"></div>
+      <h2>我的暱稱</h2>
+      <form class="card" id="nickForm" novalidate>
+        <label class="f" for="nick" style="margin-top:0">在這堂課顯示的名字</label>
+        <input class="t" id="nick" value="${esc(S.info.nickname)}" maxlength="20" autocomplete="nickname" aria-describedby="nickHelp">
+        <p class="hint" id="nickHelp">建議用本名或學號加姓名，老師才認得出你。之後的訊息會用新名字，之前的紀錄不變。</p>
+        <p class="err" id="nickErr" role="alert" hidden></p>
+        <button class="btn primary block" style="margin-top:12px" type="submit">儲存暱稱</button>
+      </form>
+      <h2>戳戳老師</h2>
+      <form class="card" id="pokeForm" novalidate>
+        <label class="f" for="poke" style="margin-top:0">私下傳給老師的短訊</label>
+        <textarea class="t" id="poke" maxlength="300" aria-describedby="pokeHelp"></textarea>
+        <p class="hint" id="pokeHelp">只有老師看得到，不會出現在群組裡。</p>
+        <p class="err" id="pokeErr" role="alert" hidden></p>
+        <button class="btn primary block" style="margin-top:12px" type="submit">${ic('send')}送出</button>
+      </form>`;
     stats();fillList($('list'),{mine:true},'你在這堂課還沒有被備份到的訊息。在群組傳一則訊息後再回來看看。');
+  },
+  async home(){
+    const mine=++seq;skeleton(main,[76,76,150,56,56]);
+    try{
+      const o=await api('overview');if(mine!==seq)return;main.removeAttribute('aria-busy');
+      const max=Math.max(1,...o.week.map(w=>w.count));
+      main.innerHTML=`<h2>今天</h2><div class="tiles">
+          <div class="tile"><div class="k">訊息</div><div class="v">${o.today.messages} <small>則</small></div></div>
+          <div class="tile"><div class="k">發言人數</div><div class="v">${o.today.people} <small>人</small></div></div>
+          <div class="tile"><div class="k">上傳檔案</div><div class="v">${o.today.uploads} <small>個</small></div></div>
+          <div class="tile"><div class="k">最後活動</div><div class="v">${o.today.last||'—'}</div></div></div>
+        <h2>近七天的紀錄數</h2>
+        <div class="card"><div class="bars" role="img" aria-label="近七天紀錄數：${o.week.map(w=>w.day.slice(5)+' '+w.count+' 則').join('，')}">
+          ${o.week.map(w=>`<div class="${w.day===today?'today':''}"><span class="num">${w.count}</span><i style="height:${Math.round(w.count/max*80)}%"></i><span class="num">${+w.day.slice(8)}日</span></div>`).join('')}</div>
+          <p class="hint">綠色是今天。包含訊息與上傳。</p></div>
+        <h2>參與名單</h2>
+        ${o.roster.length?`<ul class="list">${o.roster.map(s=>`<li><button type="button" class="rowbtn" data-person="${s.person}" data-name="${esc(s.who)}">
+          <div class="grow"><div><b>${esc(s.who)}</b></div><div class="meta"><span class="num">訊息 ${s.messages}</span><span class="num">檔案 ${s.files}</span><span class="num">最後 ${when(s.last)}</span></div></div>
+          <span style="color:var(--ink-2);font-size:13px">看紀錄 ›</span></button></li>`).join('')}</ul>
+          <p class="hint">只列出曾經在群組發言的人。</p>`:empty('還沒有學生在這個群組發言。')}`;
+    }catch(error){if(mine!==seq)return;main.removeAttribute('aria-busy');main.innerHTML=problem(error,'view');}
+  },
+  hand(){
+    const [from,to]=range();
+    main.innerHTML=`<h2>檢查範圍</h2>
+      <div class="chips">${chip('range','today','今天',S.range)}${chip('range','this','本週',S.range)}${chip('range','last','上週',S.range)}${chip('range','custom','自訂',S.range)}</div>
+      ${S.range==='custom'?`<div class="card" style="display:flex;gap:12px;flex-wrap:wrap">
+        <div class="grow"><label class="f" for="from" style="margin-top:0">從</label><input class="t" type="date" id="from" value="${from}" max="${today}"></div>
+        <div class="grow"><label class="f" for="to" style="margin-top:0">到</label><input class="t" type="date" id="to" value="${to}" max="${today}"></div></div>`:
+        `<p class="hint">${dayLabel(from)}${from===to?'':' 到 '+dayLabel(to)}</p>`}
+      <div id="hand" style="margin-top:16px"></div>`;
+    fillHand(from,to);
+  },
+  async set(){
+    main.innerHTML=`<h2>切換課程</h2><div id="courses"></div>
+      <h2>這堂課的設定</h2>
+      <form class="card" id="setForm" novalidate>
+        <label class="f" for="gname" style="margin-top:0">群組名稱</label>
+        <input class="t" id="gname" value="${esc(S.info.course)}" maxlength="60" aria-describedby="gnameHelp">
+        <p class="hint" id="gnameHelp">試算表頁籤和雲端資料夾會跟著改名。</p>
+        <p class="err" id="gnameErr" role="alert" hidden></p>
+        <label class="f" for="fwd">轉訊到管理中心</label>
+        <select class="t" id="fwd">${FORWARD.map(([v,l])=>`<option value="${v}" ${v===S.info.forward?'selected':''}>${l}</option>`).join('')}
+          ${FORWARD.some(f=>f[0]===S.info.forward)?'':`<option value="${S.info.forward}" selected disabled>每 ${S.info.forward} 分鐘（用指令設定的）</option>`}</select>
+        <button class="btn primary block" style="margin-top:16px" type="submit">儲存設定</button>
+      </form>
+      <h2>系統</h2><div class="card"><span class="num">備份機器人 ${esc(S.info.version)}</span>
+        <p class="hint">詳細狀態請在和機器人的私聊點狀態列左側，或輸入 //狀態。</p></div>`;
+    const box=$('courses');skeleton(box,[56,56]);
+    try{
+      S.courses=await api('courses');if(!$('courses'))return;box.removeAttribute('aria-busy');
+      box.innerHTML=`<div class="card" role="radiogroup" aria-label="課程">${S.courses.map(c=>`<label class="radio"><input type="radio" name="course" value="${c.code}" ${c.current?'checked':''}>
+        <span class="grow">${esc(c.name)}<span class="meta">最後活動 ${when(c.last)}</span></span></label>`).join('')}</div>`;
+    }catch(error){box.removeAttribute('aria-busy');box.innerHTML=problem(error,'view');}
   }
-}
+};
+function render(){tabs();window.scrollTo(0,0);const old=document.querySelector('.actionbar');if(old)old.remove();VIEW[S.tab]();}
+
 async function stats(){
   const box=$('stats');box.innerHTML='<div class="sk" style="height:76px"></div>';
   try{
     const me=await api('me');if(!$('stats'))return;
     box.innerHTML=`<div class="tiles"><div class="tile"><div class="k">訊息</div><div class="v">${me.messages} <small>則</small></div></div>
       <div class="tile"><div class="k">上傳檔案</div><div class="v">${me.files} <small>個</small></div></div></div>
-      <p class="hint">${me.last?`最後一次被備份：${dayLabel(me.last.day)} ${me.last.time}。這裡看得到，就代表老師那邊也有紀錄。`:'還沒有紀錄。'}</p>`;
-  }catch(error){box.innerHTML=problem(error,'stats');}
+      <p class="hint">${me.last?`最後一次被備份：${when(me.last)}。這裡看得到，就代表老師那邊也有紀錄。`:'還沒有紀錄。'}</p>`;
+  }catch(error){box.innerHTML=problem(error,'view');}
+}
+// Monday-to-Sunday weeks, on Taipei days.
+function range(){
+  const weekday=(new Date(today+'T00:00:00Z').getUTCDay()+6)%7;
+  if(S.range==='today')return [today,today];
+  if(S.range==='this')return [taipei(-weekday),today];
+  if(S.range==='last')return [taipei(-weekday-7),taipei(-weekday-1)];
+  return [S.from||taipei(-6),S.to||today];
+}
+async function fillHand(from,to){
+  const box=$('hand'),mine=++seq;skeleton(box,[76,56,56]);
+  try{
+    const r=await api('handin',{from,to});if(mine!==seq)return;box.removeAttribute('aria-busy');
+    box.innerHTML=`<div class="tiles"><div class="tile"><div class="k">已上傳</div><div class="v">${r.done.length} <small>人</small></div></div>
+        <div class="tile"><div class="k">尚未上傳</div><div class="v">${r.missing.length} <small>人</small></div></div></div>
+      <h2>尚未上傳</h2>${r.missing.length?`<ul class="list">${r.missing.map(p=>`<li><div class="grow"><b>${esc(p.who)}</b></div><span class="tag no">${ic('x')}未交</span></li>`).join('')}</ul>`
+        :empty(r.done.length?'名單上的每個人都上傳過檔案。':'名單上還沒有學生。')}
+      <h2>已上傳</h2>${r.done.length?`<ul class="list">${r.done.map(p=>`<li><div class="grow"><b>${esc(p.who)}</b><div class="meta"><span>${esc(p.file)}</span><span class="num">${dayLabel(p.day)} ${p.time}</span></div></div><span class="tag ok">${ic('ok')}已交</span></li>`).join('')}</ul>`
+        :empty('這段期間還沒有人上傳檔案。')}
+      <p class="hint">以「這段期間有沒有上傳任何檔案、圖片或影音」判斷，不檢查內容；只列出曾經在群組發言的人。</p>`;
+  }catch(error){if(mine!==seq)return;box.removeAttribute('aria-busy');box.innerHTML=problem(error,'view');}
+}
+
+// ---------- dialog ----------
+function sheet(html){
+  const back=document.activeElement;
+  $('overlay').innerHTML=`<div class="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">${html}</div></div>`;
+  const onKey=e=>{if(e.key==='Escape')close();};
+  function close(){$('overlay').innerHTML='';document.removeEventListener('keydown',onKey);if(back&&back.isConnected)back.focus();}
+  document.addEventListener('keydown',onKey);
+  $('overlay').querySelector('.scrim').addEventListener('click',e=>{if(e.target.classList.contains('scrim')||e.target.closest('[data-close]'))close();});
+  const first=$('overlay').querySelector('input,button');if(first)first.focus();
+  return close;
+}
+async function castDialog(){
+  const picked=[...S.picked];
+  const close=sheet(`<h3 id="sheetTitle">廣播 ${picked.length} 則訊息</h3>
+    <ul class="list" style="margin:8px 0 16px">${picked.map(([,label])=>`<li><div class="text" style="font-size:14px">${esc(label.slice(0,80))}</div></li>`).join('')}</ul>
+    <div id="castTargets"><div class="sk" style="height:96px"></div></div>
+    <p class="err" id="castErr" role="alert" hidden></p>
+    <div class="row"><button type="button" class="btn" data-close>取消</button><button type="button" class="btn primary" id="castGo" disabled>${ic('send')}確認廣播</button></div>`);
+  try{
+    if(!S.courses)S.courses=await api('courses');if(!$('castTargets'))return;
+    const others=S.courses.filter(c=>!c.current);
+    $('castTargets').innerHTML=others.length?`<p class="hint" style="margin-bottom:4px">送到哪個群組？按下確認後才會送出，送出後無法收回。</p>
+      <div role="radiogroup" aria-label="目標群組">${others.map(c=>`<label class="radio"><input type="radio" name="to" value="${c.code}"><span>${esc(c.name)}</span></label>`).join('')}</div>`
+      :'<p class="hint">沒有其他群組可以廣播。</p>';
+    $('castTargets').addEventListener('change',()=>{$('castGo').disabled=false;});
+  }catch(error){$('castTargets').innerHTML=problem(error,'none');}
+  $('castGo').addEventListener('click',e=>busy(e.currentTarget,async()=>{
+    const to=document.querySelector('input[name=to]:checked');
+    try{
+      const done=await api('broadcast',{rows:picked.map(p=>p[0]),target:to.value});
+      close();S.select=false;S.picked.clear();render();
+      toast('已把 '+done.sent+' 則訊息廣播到「'+S.courses.find(c=>c.code===to.value).name+'」');
+    }catch(error){const el=$('castErr');el.textContent=error.message;el.hidden=false;}
+  }));
 }
 
 // ---------- events ----------
-$('tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(b){S.tab=b.dataset.tab;render();main.focus({preventScroll:true});}});
+$('tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.tab=b.dataset.tab;S.select=false;S.picked.clear();render();main.focus({preventScroll:true});});
 let deb;
-main.addEventListener('input',e=>{if(e.target.id!=='q')return;S.q=e.target.value;clearTimeout(deb);
-  deb=setTimeout(()=>fillList($('list'),{q:S.q,kind:S.kind},'找不到符合的訊息。試試較短的關鍵字，或改選「全部」。'),500);});
+main.addEventListener('input',e=>{if(e.target.id!=='q')return;S.q=e.target.value;clearTimeout(deb);deb=setTimeout(()=>fillList($('list'),logParams(),LOG_EMPTY),500);});
+main.addEventListener('change',async e=>{
+  const t=e.target;
+  if(t.dataset.pick){
+    const id=+t.dataset.pick;
+    if(t.checked&&S.picked.size>=5){t.checked=false;return toast('一次最多廣播 5 則','alert');}
+    t.checked?S.picked.set(id,t.dataset.label):S.picked.delete(id);actionbar();
+  }else if(t.id==='from'||t.id==='to'){
+    S.from=$('from').value;S.to=$('to').value;
+    if(S.from&&S.to&&S.from<=S.to)fillHand(S.from,S.to);else toast('開始日期要早於或等於結束日期','alert');
+  }else if(t.name==='course'){
+    auth.course=t.value;demo.course=t.value;S.courses=null;S.person=null;S.q='';
+    if(!DEMO)history.replaceState(null,'','?c='+encodeURIComponent(t.value));
+    await boot('set');if(S.info)toast('已切換到「'+S.info.course+'」');
+  }
+});
 main.addEventListener('click',async e=>{
   const t=e.target.closest('button');if(!t)return;const d=t.dataset;
   if('kind' in d){S.kind=d.kind;render();}
   else if('fkind' in d){S.fileKind=d.fkind;render();}
-  else if('retry' in d){d.retry==='boot'?boot():d.retry==='stats'?stats():render();}
+  else if('range' in d){S.range=d.range;render();}
+  else if('unperson' in d){S.person=null;render();}
+  else if('select' in d){S.select=!S.select;S.picked.clear();render();}
+  else if('person' in d){S.person={id:+d.person,name:d.name};S.kind='all';S.q='';S.tab='log';render();}
+  else if('cast' in d){castDialog();}
+  else if('retry' in d){d.retry==='boot'?boot():render();}
   else if('more' in d){
     const box=$('list'),params={...JSON.parse(box.dataset.params),offset:+d.more},label=t.innerHTML;
     t.disabled=true;t.textContent='載入中…';
@@ -166,23 +360,49 @@ main.addEventListener('click',async e=>{
     }catch(error){t.disabled=false;t.innerHTML=label;toast(error.message,'alert');}
   }
   else if('get' in d){
-    const label=t.innerHTML;t.disabled=true;t.textContent='處理中…';
-    try{
-      const file=await api('file',{row:+d.get});
-      if(DEMO)toast('示範模式：正式版會開啟「'+d.name+'」');
-      else if(window.liff&&liff.isInClient())liff.openWindow({url:file.url,external:true});
-      else location.href=file.url;
-    }catch(error){toast(error.message,'alert');}
-    t.disabled=false;t.innerHTML=label;
+    busy(t,async()=>{
+      try{
+        const file=await api('file',{row:+d.get});
+        if(DEMO)toast('示範模式：正式版會開啟「'+d.name+'」');
+        else if(window.liff&&liff.isInClient())liff.openWindow({url:file.url,external:true});
+        else location.href=file.url;
+      }catch(error){toast(error.message,'alert');}
+    });
+  }
+});
+main.addEventListener('submit',e=>{
+  e.preventDefault();const form=e.target,btn=form.querySelector('[type=submit]');
+  const fail=(errId,fieldId,text)=>{const el=$(errId);el.textContent=text;el.hidden=false;$(fieldId).setAttribute('aria-invalid','true');$(fieldId).focus();};
+  const clear=(errId,fieldId)=>{$(errId).hidden=true;$(fieldId).removeAttribute('aria-invalid');};
+  if(form.id==='nickForm'){
+    const v=$('nick').value.trim();
+    if(v.length<2)return fail('nickErr','nick','暱稱至少要兩個字。');
+    busy(btn,async()=>{try{const r=await api('nickname',{name:v});S.info.nickname=r.nickname;header();clear('nickErr','nick');toast('暱稱已改為「'+r.nickname+'」');}
+      catch(error){fail('nickErr','nick',error.message);}});
+  }else if(form.id==='pokeForm'){
+    const v=$('poke').value.trim();
+    if(!v)return fail('pokeErr','poke','請先寫下想跟老師說的話。');
+    busy(btn,async()=>{try{await api('poke',{text:v});$('poke').value='';clear('pokeErr','poke');toast('已私下傳給老師');}
+      catch(error){fail('pokeErr','poke',error.message);}});
+  }else if(form.id==='setForm'){
+    const name=$('gname').value.trim(),forward=+$('fwd').value,change={};
+    if(name!==S.info.course)change.name=name;
+    if(forward!==S.info.forward)change.forward=forward;
+    if(!Object.keys(change).length)return toast('沒有需要儲存的變更');
+    if(change.name!==undefined&&name.length<2)return fail('gnameErr','gname','群組名稱至少要兩個字。');
+    busy(btn,async()=>{try{const r=await api('saveSettings',change);
+        if(r.name!==undefined){S.info.course=r.name;$('gname').value=r.name;}if(r.forward!==undefined)S.info.forward=r.forward;
+        S.courses=null;header();clear('gnameErr','gname');toast('設定已儲存');}
+      catch(error){fail('gnameErr','gname',error.message);}});
   }
 });
 
 // ---------- start ----------
 function loadSdk(){return new Promise((ok,fail)=>{const s=document.createElement('script');s.src='https://static.line-scdn.net/liff/edge/2/sdk.js';s.onload=ok;s.onerror=()=>fail(Object.assign(new Error('LINE 元件載入失敗，請檢查網路。'),{code:'network'}));document.head.append(s);});}
-async function boot(){
+async function boot(tab){
   $('demo').hidden=!DEMO;skeleton();
   try{
-    if(!DEMO){
+    if(!DEMO&&!auth.idToken){
       if(!window.liff)await loadSdk();
       await liff.init({liffId:CFG.liffId});
       if(!liff.isLoggedIn()){liff.login({redirectUri:location.href});return;}
@@ -190,12 +410,11 @@ async function boot(){
       auth.course=new URLSearchParams(location.search).get('c')||'';
       if(!auth.course)throw Object.assign(new Error('請從課堂群組的「備份」選單開啟這個頁面。'),{code:'no_course'});
     }
-    const info=await api('init');
-    $('course').textContent=info.course;document.title=info.course+'・課堂頁面';
-    $('who').textContent=(info.teacher?'老師':info.nickname||'尚未設定暱稱')+(info.teacher?'':'（你）');
-    main.removeAttribute('aria-busy');$('tabs').hidden=false;render();
+    S.info=await api('init');
+    S.tab=tab||(S.info.teacher?'home':'log');
+    header();main.removeAttribute('aria-busy');$('tabs').hidden=false;render();
   }catch(error){
-    main.removeAttribute('aria-busy');
+    main.removeAttribute('aria-busy');$('tabs').hidden=true;
     if(!error.code)error=Object.assign(new Error('無法開啟頁面：'+error.message),{code:'network'});
     main.innerHTML=problem(error,'boot');
   }
