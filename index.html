@@ -87,50 +87,46 @@ const DEMO_COURSES=[['a','媒體產業研究',0,'10:42'],['b','數位敘事工�
 const demoSummaryRefreshes=new Map();
 function demoSummaries(){
   const current=monday(today),week1=demo.week1||monday(taipei(-66)),weeks=[],minMessages=5;
-  const speakers=['陳語彤','林柏宇','老師','張家豪','王子晴','李宜蓁','黃品叡','許宥安','何亭妤','周宇辰','蔡欣妤','楊承翰'];
+  const names=['老師','陳語彤','許哲維','張書瑜','林冠宇','王品妍','李宜蓁','黃品叡','許宥安','何亭妤','周宇辰','蔡欣妤'];
   for(let day=current,i=0;day>=week1;day=summaryDay(day,-7),i++){
-    const days=(i===0?[38,86,21,124,8,0,5]:i%4===1?[2,0,2,0,0,0,0]:[12,47,119,64,18,0,3])
-      .map((n,k)=>summaryDay(day,k)>today?null:n);
+    const days=(i===0?[38,86,21,124,8,0,5]:i%4===1?[2,0,2,0,0,0,0]:[12,47,119,64,18,0,3]).map((n,k)=>summaryDay(day,k)>today?null:n);
     const messages=days.reduce((sum,n)=>sum+n,0),peakIndex=days.indexOf(Math.max(...days));
-    const low=messages<minMessages,first=summaryDate(day),last=summaryDate(i===0?summaryDay(day,Math.min(2,daysUntil(day,today))):summaryDay(day,2));
-    const timeline=low?[]:[
-      {from:first+' 09:05',to:first+' 10:25',topic:'比較訂閱與廣告分潤',who:speakers.slice(0,8)},
-      {from:last+' 13:10',to:last+' 14:45',topic:'確認訪談分工與時間碼',who:[...speakers.slice(2,4),...speakers.slice(8)]}
-    ];
+    const low=messages<minMessages,d1=summaryDate(day),d2=summaryDate(i===0?summaryDay(day,Math.min(2,daysUntil(day,today))):summaryDay(day,2));
     const lines=low?[
-      {time:first+' 09:05',who:'陳語彤',text:'老師，下週的訪談可以改成線上嗎？'},
-      {time:first+' 09:15',who:'老師',text:'可以，請先確認受訪者方便的時間。'},
-      {time:last+' 14:05',who:'林柏宇',text:'我們這組先把問題整理在共筆。'},
-      {time:last+' 14:12',who:'陳語彤',text:'收到，我晚點補上訪綱。'}
-    ]:[];
-    const people=low?['陳語彤','老師','林柏宇'].map(who=>({who,count:lines.filter(line=>line.who===who).length,
-      spans:lines.filter(line=>line.who===who).map(line=>({day:line.time.slice(0,5),from:line.time.slice(6),to:line.time.slice(6)})),
-      repliesTo:{},repliedBy:{},mentions:{},topics:[],related:[]})):
-      speakers.map((who,j)=>({who,count:Math.floor(messages/speakers.length)+(j<messages%speakers.length?1:0),
-        spans:[{day:j<8?first:last,from:j<8?'09:05':'13:10',to:j<8?'10:25':'14:45'}],
-        repliesTo:j===3?{'老師':3}:{},repliedBy:j===2?{'張家豪':3}:{},
-        mentions:j===0?{'林柏宇':1}:{},topics:[['訂閱與廣告分潤','會員收入案例','時間碼標法','逐字稿格式',
-          '平台公開資料','訪談分工','樣本篩選','創作者拆帳','訪談提綱','逐字稿校對','期末簡報','台灣平台案例'][j]],
-        related:j===0?[{who:'楊承翰',why:'兩人都引用台灣平台的分潤案例'}]:[]}));
-    const ai=low?null:{
-      themes:[
-        {title:'串流平台分潤',share:46,from:first,to:last,note:'比較訂閱拆帳與廣告分潤，並討論創作者能取得哪些資料。'},
-        {title:'小組訪談與逐字稿',share:34,from:first,to:last,note:'各組確認訪談分工、逐字稿格式和時間碼標法。'},
-        {title:'案例與資料來源',share:20,from:first,to:last,note:'整理台灣串流平台案例，討論不同來源的數字如何對照。'}
-      ],
-      questions:['訂閱平台會公開每一部作品的分潤方式嗎？','訪談逐字稿需要逐句標示時間嗎？'],
-      open:['還缺一個能對照會員收入與廣告收入的台灣案例。'],
-      quotes:[{who:'張家豪',text:'請問逐字稿需要標時間碼嗎？'},{who:'老師',text:'不用逐句標，每段開頭標一次就可以。'}],
-      next:i===0?'':'下週可帶著各組整理出的分潤案例，對照平台與創作者取得的資料。'
-    };
-    const latest=demoSummaryRefreshes.get(demo.course);
+      {time:d1+' 09:05',who:'陳語彤',text:'老師，下週的訪談可以改成線上嗎？'},
+      {time:d1+' 09:15',who:'老師',text:'可以，請先確認受訪者方便的時間。'},
+      {time:d2+' 14:05',who:'林冠宇',text:'我們這組先把問題整理在共筆。'},
+      {time:d2+' 14:12',who:'陳語彤',text:'收到，我晚點補上訪綱。'}]:[];
+    const refreshed=demoSummaryRefreshes.get(demo.course)?.weeks.get(day);
+    const summary=low?null:{
+      headline:'這週從「付費牆要擋多少」談到「讀者到底為什麼付錢」，對免費篇數的看法分歧。',
+      threads:[
+        {title:'付費牆要擋多少',starter:'老師',from:d1+' 14:10',to:d1+' 15:40',outcome:'split',note:'沒有結論，可在下週接續。',positions:[
+          {view:'免費篇數太少，讀者會直接離開',who:['陳語彤','許哲維','李宜蓁','黃品叡','許宥安','何亭妤','周宇辰']},
+          {view:'願意付的是不被廣告打擾，跟篇數無關',who:['張書瑜','王品妍','蔡欣妤']}]},
+        {title:'小組報告分工',starter:'陳語彤',from:d1+' 20:05',to:d2+' 10:12',outcome:'consensus',note:'各組已分好訪談與簡報。',positions:[
+          {view:'訪談與簡報分開負責',who:['陳語彤','林冠宇','王品妍','李宜蓁']}]},
+        {title:'期中報告格式',starter:'林冠宇',from:d2+' 09:40',to:d2+' 09:52',outcome:'open',note:'',positions:[
+          {view:'想確認字數與是否附逐字稿',who:['林冠宇','黃品叡']}]}],
+      pending:i===0?[{who:'林冠宇',time:d2+' 09:40',text:'期中報告要附訪談逐字稿嗎？'},{who:'陳語彤',time:d2+' 10:12',text:'第 3 組還缺一位做簡報的人。'}]:[]};
+    const acts=[[['ask','organize'],'付費牆要擋多少','用提問開啟討論，最後整理兩種看法。'],[['view'],'付費牆要擋多少','主張免費篇數太少會流失讀者。'],
+      [['example'],'付費牆要擋多少','舉計量式付費牆的例子支持這個看法。'],[['counter'],'付費牆要擋多少','把焦點從篇數轉到廣告干擾。'],
+      [['ask'],'期中報告格式','問期中報告要不要附逐字稿。'],[['view','admin'],'小組報告分工','同意廣告才是關鍵，並認領簡報。'],
+      [['view'],'付費牆要擋多少','分享自己退訂的經驗。'],[['ask'],'期中報告格式','追問字數上限。'],[['example'],'付費牆要擋多少','補充國外媒體的免費篇數。'],
+      [['view'],'付費牆要擋多少','認為學生優惠比篇數重要。'],[['answer'],'小組報告分工','回答訪談時間的安排。'],[['counter'],'付費牆要擋多少','認為沒有廣告才值得付費。']];
+    const people=low?['陳語彤','老師','林冠宇'].map(who=>({who,count:lines.filter(l=>l.who===who).length,first:lines.find(l=>l.who===who).time,
+        roles:[],notes:[],repliesTo:{},repliedBy:{},mentions:{},followed:0,unanswered:false})):
+      names.map((who,j)=>({who,count:Math.floor(messages/names.length)+(j<messages%names.length?1:0),first:d1+' 14:'+String(10+j*3).padStart(2,'0'),
+        roles:acts[j][0],notes:[{thread:acts[j][1],note:acts[j][2]}],
+        repliesTo:j===2?{'陳語彤':2}:j===5?{'張書瑜':1}:{},repliedBy:j===3?{'王品妍':1,'蔡欣妤':2,'許哲維':1,'老師':1}:j===1?{'許哲維':2}:{},
+        mentions:{},followed:j===3?4:j===1?1:0,unanswered:i===0&&(j===4||j===1)}));
     weeks.push({monday:day,w:'W'+(1+(Date.parse(day)-Date.parse(week1))/6048e5),
       range:summaryDate(day)+'–'+summaryDate(summaryDay(day,6)),kind:i===0?'live':'final',low,
       stats:{messages,people:people.length,days,peak:{day:summaryDay(day,peakIndex),hour:low?9:14,count:low?2:Math.ceil(days[peakIndex]/3)}},
-      ai,people,timeline,lines,model:low?null:i===0?'gpt-6-luna':'gpt-6.2-sol',
-      made:latest?.weeks.get(day)||(i===0?new Date(Date.now()-3600e3).toISOString():summaryDay(day,7)+'T00:00:00.000Z'),error:null});
+      lines,summary,people,silent:low?[]:['吳承恩','鄭雅文','劉冠廷'],fresh:i===0&&!refreshed?12:0,loose:low?0:7,waiting:i===0&&!refreshed,
+      model:low?null:'gpt-6.2-sol',made:low?null:refreshed||(i===0?new Date(Date.now()-3600e3).toISOString():summaryDay(day,5)+'T08:00:00.000Z'),error:null});
   }
-  return {configured:true,week1,today,minMessages,weeks};
+  return {configured:true,week1,today,minMessages,quietMinutes:60,weeks};
 }
 async function demoApi(action,b={}){
   await new Promise(r=>setTimeout(r,500));
@@ -176,7 +172,7 @@ async function demoApi(action,b={}){
     default:if(typeof demoRoll==='function'){const r=demoRoll(action,b);if(r!==undefined)return r;}
   }
   const q=(b.q||'').trim().toLowerCase(),size=5,start=b.offset||0,person=b.person!=null?DEMO_PEOPLE[b.person-3]:'';
-  const f=FAKE.filter(r=>(!b.mine||r.mine)&&(!person||r.who===person)&&(b.kind!=='text'||r.type==='text')&&(b.kind!=='upload'||r.upload)&&(b.kind!=='doc'||r.type==='file')
+  const f=FAKE.filter(r=>(!b.mine||r.mine)&&(!b.day||r.day===b.day)&&(!person||r.who===person)&&(b.kind!=='text'||r.type==='text')&&(b.kind!=='upload'||r.upload)&&(b.kind!=='doc'||r.type==='file')
     &&(b.kind!=='media'||(r.upload&&r.type!=='file'))&&(!q||(r.text+r.who).toLowerCase().includes(q)));
   const items=f.slice(start,start+size).map(pub);
   return {total:f.length,items,next:start+items.length<f.length?start+items.length:null};
@@ -185,7 +181,7 @@ async function demoApi(action,b={}){
 const api=(action,body={})=>(DEMO?demoApi:realApi)(action,S.preview?{...body,asStudent:true}:body);
 
 // ---------- state ----------
-const S={preview:false,tab:'log',q:'',kind:'all',fileKind:'upload',person:null,select:false,picked:new Map(),range:'this',from:'',to:'',info:null,courses:null};
+const S={preview:false,tab:'log',q:'',day:'',summaryTab:'talk',kind:'all',fileKind:'upload',person:null,select:false,picked:new Map(),range:'this',from:'',to:'',info:null,courses:null};
 // Five tabs at most: the teacher finds files through 歷程's 檔案與圖片 filter.
 const TABS={student:[['log','歷程','list'],['files','檔案','folder'],['roll','點名','pin'],['me','我的','user']],
             teacher:[['home','總覽','chart'],['log','歷程','list'],['roll','點名','pin'],['hand','繳交','check2'],['set','設定','gear']]};
@@ -237,7 +233,7 @@ async function fillList(box,params,emptyText){
     box.dataset.params=JSON.stringify(params);box.dataset.lastDay=data.items.length?data.items.at(-1).day:'';
   }catch(error){if(mine!==seq)return;box.removeAttribute('aria-busy');box.innerHTML=problem(error,'view');}
 }
-const logParams=()=>({q:S.q,kind:S.kind,...(S.person?{person:S.person.id}:{})});
+const logParams=()=>({q:S.q,kind:S.kind,...(S.day?{day:S.day}:{}),...(S.person?{person:S.person.id}:{})});
 const LOG_EMPTY='找不到符合的訊息。試試較短的關鍵字，或清除篩選。';
 function actionbar(){
   const old=document.querySelector('.actionbar');if(old)old.remove();
@@ -302,119 +298,143 @@ function meetSendDialog(){
     catch(error){const el=$('meetSendErr');el.textContent=error.message;el.hidden=false;}}));
 }
 
-// The summary screens stay inside the teacher's 總覽 tab.
+// The summary screens stay inside the teacher's 總覽 tab. A week is made of discussion segments the
+// server summarised (src/aiSummary.js); counts and who-replied-to-whom are computed, the rest is AI.
 const SUMMARY_DAYS='一二三四五六日';
 const SUMMARY_SETUP='尚未設定 OpenAI 金鑰：到 Apps Script 專案設定的指令碼屬性加入 OPENAI_API_KEY';
+const SUMMARY_OUTCOME={consensus:'已有共識',split:'看法分歧',answered:'已獲回答',open:'沒有結論',info:'資訊分享'};
+const SUMMARY_ROLE={ask:'提問',answer:'回答',view:'提出看法',counter:'提出不同看法',example:'補充例子',organize:'整理歸納',admin:'行政事務'};
+const SUMMARY_TABS=[['talk','討論'],['people','參與者'],['data','數據']];
 const summaryDay=(day,offset)=>new Date(Date.parse(day)+offset*864e5).toISOString().slice(0,10);
 const summaryDate=day=>day.slice(5,10).replace('-','/');
+const daysUntil=(from,to)=>Math.round((Date.parse(to)-Date.parse(from))/864e5);
 const summaryTime=iso=>new Date(Date.parse(iso)+8*3600e3).toISOString().slice(0,16).replace('T',' ');
 const summaryLive=w=>w.monday===monday(S.summaryData.today);
 const summaryProgress=()=>'<span class="tag ok summary-progress">進行中</span>';
 const summaryBadge=()=>'<span class="tag summary-badge">AI 摘要</span>';
+// 'MM/DD' inside week w, as the log's YYYY-MM-DD.
+const summaryIso=(w,md)=>[0,1,2,3,4,5,6].map(k=>summaryDay(w.monday,k)).find(d=>summaryDate(d)===md)||'';
+const summarySpan=(from,to)=>from.slice(0,5)===to.slice(0,5)?`${from}–${to.slice(6)}`:`${from}–${to}`;
 
 function summaryStats(w){
-  const {messages,people,days,peak}=w.stats,max=Math.max(1,...days);
-  const label=days.map((n,i)=>`週${SUMMARY_DAYS[i]} ${n===null?'尚未到':n+' 則'}`).join('，');
+  const max=Math.max(1,...w.stats.days.map(n=>n||0)),peak=w.stats.peak;
+  const label=w.stats.days.map((n,i)=>'週'+SUMMARY_DAYS[i]+(n==null?' 尚未到':' '+n+' 則')).join('，');
   return `<div class="tiles summary-stats">
-    <div class="tile"><div class="k">訊息</div><div class="v">${messages} <small>則</small></div></div>
-    <div class="tile"><div class="k">發言人數</div><div class="v">${people} <small>人</small></div></div>
-    </div>
+      <div class="tile"><div class="k">訊息</div><div class="v">${w.stats.messages} <small>則</small></div></div>
+      <div class="tile"><div class="k">發言人數</div><div class="v">${w.stats.people} <small>人</small></div></div></div>
     <div class="summary-heat" role="img" aria-label="${esc(w.w+' 每日訊息數：'+label)}">
-      ${days.map((n,i)=>`<div class="${n===null?'future':n/max>=.7?'high':n/max>=.25?'mid':n?'low':''}">
-        <span>${SUMMARY_DAYS[i]}</span><strong class="num">${n??'—'}</strong></div>`).join('')}
-    </div>
-    ${peak.count?`<p class="hint">尖峰 週${SUMMARY_DAYS[daysUntil(w.monday,peak.day)]} ${String(peak.hour).padStart(2,'0')}:00（${peak.count} 則）</p>`:''}
-    <p class="hint">數字由程式從歷程計算，不經過 AI</p>`;
-}
-const daysUntil=(from,to)=>(Date.parse(to)-Date.parse(from))/864e5;
-
-function summaryTimeline(timeline){
-  if(!timeline.length)return '';
-  return `<section class="summary-section summary-timeline">
-    <div class="summary-heading"><h3>本週時間軸</h3>${summaryBadge()}</div>
-    <ol class="summary-rows">${timeline.map(({from,to,topic,who})=>{
-      const range=from===to?from:from+'–'+(from.slice(0,5)===to.slice(0,5)?to.slice(6):to);
-      const names=who.slice(0,6).map(name=>name||'（未設定暱稱）').join('、')+(who.length>6?' 等 '+who.length+' 人':'');
-      return `<li><div class="meta num">${esc(range)}</div><strong>${esc(topic)}</strong>
-        ${names?`<div class="meta">${esc(names)}</div>`:''}</li>`;
-    }).join('')}</ol></section>`;
-}
-
-function summaryPeople(people){
-  if(!people.length)return '';
-  return `<section class="summary-section summary-people">
-    <div class="summary-heading"><h3>誰說了什麼</h3><small class="hint">由歷程計算</small></div>
-    <ul class="summary-rows" id="summaryPeople">${people.map((person,i)=>{
-      const {who,count,spans,repliesTo,repliedBy,mentions,topics,related}=person;
-      const interactions=[
-        ...Object.entries(repliesTo).map(([name,n])=>`回覆 ${name} ${n} 次`),
-        ...Object.entries(repliedBy).map(([name,n])=>`被 ${name||'（未設定暱稱）'} 回覆 ${n} 次`),
-        ...Object.keys(mentions).map(name=>'提到 @'+name)
-      ];
-      const times=spans.map(({day,from,to})=>day+' '+from+(from===to?'':'–'+to)).join('、');
-      return `<li${i>=8?' data-summary-extra hidden':''}>
-        <div class="meta"><b>${esc(who||'（未設定暱稱）')}</b><span class="num">${count} 則</span>
-          <span class="num">${esc(times)}</span></div>
-        ${topics.length?`<p>${summaryBadge()} ${esc(topics.join('、'))}</p>`:''}
-        ${interactions.length?`<p class="hint">互動・${esc(interactions.join('、'))}</p>`:''}
-        ${related.length?`<p><span class="tag summary-badge summary-inference">AI 推測</span> 可能相關・${related
-          .map(({who,why})=>esc((who||'（未設定暱稱）')+'（'+why+'）')).join('、')}</p>`:''}
-      </li>`;
-    }).join('')}</ul>
-    ${people.length>8?`<button type="button" class="btn block summary-expand" data-summary-all="${people.length}"
-      aria-controls="summaryPeople" aria-expanded="false">顯示全部 ${people.length} 人</button>`:''}
-    </section>`;
+      ${w.stats.days.map((n,i)=>`<div class="${n==null?'future':n/max>.66?'high':n/max>.25?'mid':'low'}">
+        <span>${SUMMARY_DAYS[i]}</span><strong class="num">${n==null?'—':n}</strong></div>`).join('')}</div>
+    ${peak.count?`<p class="hint">尖峰 週${SUMMARY_DAYS[(new Date(peak.day+'T00:00:00Z').getUTCDay()+6)%7]} ${String(peak.hour).padStart(2,'0')}:00（${peak.count} 則）</p>`:''}`;
 }
 
 function summaryLow(w){
   return `<div class="summary-section summary-low">
-    <p>本週只有 ${w.stats.messages} 則，直接列出：</p>
+    <p class="hint">${w.lines.length?`本週只有 ${w.stats.messages} 則，直接列出：`:'本週還沒有文字訊息。'}</p>
     ${w.lines.length?`<ul class="summary-rows">${w.lines.map(({time,who,text})=>
-      `<li><div class="meta"><span class="num">${esc(time)}</span><b>${esc(who||'（未設定暱稱）')}</b></div>
-        <div class="text">${esc(text)}</div></li>`).join('')}</ul>`:'<p class="hint">這週沒有符合條件的純文字訊息。</p>'}</div>`;
+      `<li><div class="meta"><b>${esc(who)}</b><span class="num">${esc(time)}</span></div><div class="text">${esc(text)}</div></li>`).join('')}</ul>`:''}</div>`;
 }
 
-function summaryAi(ai,full){
-  const list=(label,items)=>`<div class="summary-section"><h3>${label}</h3>
-    ${items.length?`<ul>${items.map(text=>`<li>${esc(text)}</li>`).join('')}</ul>`:'<p class="hint">—</p>'}</div>`;
-  return `<div class="summary-ai${full?' summary-ai-compact':''}">
-    <div class="summary-heading"><h3>主題與約略占比</h3>${summaryBadge()}</div>
-    <ul class="summary-topics">${ai.themes.map(t=>`<li>
-      <div class="summary-topic"><strong>${esc(t.title)}</strong><span class="num">約 ${t.share}%</span>
-        <span class="hint num">${esc(t.from===t.to?t.from:t.from+'–'+t.to)}</span></div>
-      <div class="summary-ratio" role="img" aria-label="${esc(t.title+' 約占 '+t.share+'%')}"><i style="width:${Number(t.share)}%"></i></div>
-      ${full?`<p class="hint">${esc(t.note)}</p>`:''}</li>`).join('')}</ul>
-    ${full?list('關鍵問題',ai.questions)+list('還沒解決',ai.open)+`
-      <div class="summary-section"><h3>留下來的發言</h3>
-        ${ai.quotes.length?ai.quotes.map(q=>`<blockquote><p>「${esc(q.text)}」</p><footer>${esc(q.who||'（未設定暱稱）')}</footer></blockquote>`).join(''):'<p class="hint">—</p>'}
-      </div>
-      <div class="summary-section"><h3>下週可以接續</h3><p>${esc(ai.next||'—')}</p></div>`:''}
-    </div>`;
+function summaryPending(pending,limit){
+  if(!pending.length)return '';
+  return `<div class="summary-pending" role="group" aria-label="還沒有人回應的提問">
+    <strong>${ic('alert')}還沒有人回應・${pending.length}</strong>
+    <ul>${pending.slice(0,limit).map(p=>`<li><b>${esc(p.who)}</b> <span class="num">${esc(p.time)}</span>：${esc(p.text)}</li>`).join('')}</ul>
+    ${pending.length>limit?`<p class="hint">還有 ${pending.length-limit} 則，在完整摘要裡。</p>`:''}</div>`;
 }
 
-function summaryCard(w,full=false){
-  const {configured,today}=S.summaryData,current=summaryLive(w),ai=configured?w.ai:null;
-  const refresh=configured&&(!w.low||full);
-  return `<section class="card summary-card">
-    <div class="summary-heading"><div><h2>${current?`本週至今 <span class="wk">${esc(w.w)}</span>`:esc(w.w)+' 摘要'}</h2>
-      <div class="meta num">${esc(w.range)}${current?'（截至 '+summaryDate(today)+'）':''}</div></div>
+// What stands between the saved summary and the log as it is now.
+function summaryState(w){
+  const {configured,quietMinutes}=S.summaryData;
+  if(!configured)return `<p class="hint summary-message">${SUMMARY_SETUP}</p>`;
+  if(w.low)return '';
+  const parts=[];
+  if(w.error)parts.push(`<p class="err summary-message" role="alert">${esc(w.error)}${w.summary?' 下面是上次成功產生的內容。':''}</p>`);
+  if(w.fresh)parts.push(`<p class="hint summary-message">${w.waiting?`討論還在進行：有 ${w.fresh} 則還沒摘要，安靜 ${quietMinutes} 分鐘後會自動產生。`:`有 ${w.fresh} 則還沒摘要，下次排程會補上。`}</p>`);
+  else if(!w.summary&&!w.error)parts.push(`<p class="hint summary-message">${w.loose?`這週的訊息很零散，沒有一段討論達到 ${S.summaryData.minMessages} 則。`:'摘要尚未產生。'}</p>`);
+  return parts.join('');
+}
+
+function summaryTalk(w){
+  const s=w.summary;
+  if(!s)return w.low?summaryLow(w):'';
+  return summaryPending(s.pending,5)+s.threads.map((t,i)=>{
+    const who=[...new Set([t.starter,...t.positions.flatMap(p=>p.who)].filter(Boolean))];
+    return `<details class="summary-thread"${i===0?' open':''}>
+      <summary><span class="grow"><strong>${esc(t.title)}</strong>
+        <span class="hint">${t.starter?`由 ${esc(t.starter)} 開始・`:''}${who.length?who.length+' 人・':''}${SUMMARY_OUTCOME[t.outcome]||''}</span></span>
+        <span class="hint num">${esc(summarySpan(t.from,t.to))}</span></summary>
+      ${t.positions.map(p=>`<div class="summary-view"><p>${esc(p.view)}</p>
+        ${p.who.length?`<p class="hint">${esc(p.who.slice(0,4).join('、'))}${p.who.length>4?` 等 ${p.who.length} 人`:''}</p>`:''}</div>`).join('')}
+      ${t.note?`<p class="summary-outcome">→ ${esc(t.note)}</p>`:''}
+      <button type="button" class="linkbtn summary-source" data-summary-log="${esc(summaryIso(w,t.from.slice(0,5)))}">看這天的原始對話</button>
+    </details>`;}).join('')+
+    (w.loose?`<p class="hint summary-message">另有 ${w.loose} 則零散訊息沒有納入摘要。</p>`:'');
+}
+
+function summaryPeople(w){
+  if(w.low)return summaryLow(w);
+  const names=o=>Object.keys(o);
+  return `<p class="hint">${w.people.length} 人發言，依第一次發言的時間排列。標籤說的是這個人的發言在討論裡的作用${w.summary?'（AI 摘要）':''}；誰回應誰由歷程計算。</p>
+    <ul class="summary-rows" id="summaryPeople">${w.people.map((p,i)=>`<li${i>=8?' data-summary-extra hidden':''}>
+      <div class="meta"><b>${esc(p.who)}</b><span class="num">${esc(p.first)}</span></div>
+      <div class="summary-chips">${p.roles.map(r=>r==='ask'&&p.unanswered?'':`<span class="tag summary-role${r==='counter'?' counter':''}">${SUMMARY_ROLE[r]||esc(r)}</span>`).join('')}
+        ${p.unanswered?'<span class="tag summary-role wait">提問・還沒有人回應</span>':''}
+        ${p.followed?`<span class="tag summary-role plain">被 ${p.followed} 人回應</span>`:''}
+        ${names(p.repliesTo).length?`<span class="tag summary-role plain">回應 ${esc(names(p.repliesTo).slice(0,3).join('、'))}</span>`:''}
+        ${names(p.mentions).length?`<span class="tag summary-role plain">提到 ${esc(names(p.mentions).slice(0,3).join('、'))}</span>`:''}</div>
+      ${p.notes.map(n=>`<p>在「${esc(n.thread)}」${esc(n.note)}</p>`).join('')}</li>`).join('')}</ul>
+    ${w.people.length>8?`<button type="button" class="btn block summary-expand" data-summary-all="${w.people.length}"
+      aria-controls="summaryPeople" aria-expanded="false">顯示全部 ${w.people.length} 人</button>`:''}
+    ${w.silent&&w.silent.length?`<details class="summary-silent"><summary>本週沒有發言：${w.silent.length} 人</summary>
+      <p>${esc(w.silent.join('、'))}</p><p class="hint">名單是這學期在群組出現過的人；只有老師看得到。</p></details>`:''}`;
+}
+
+function summaryData(w){
+  return summaryStats(w)+`<p class="hint">數字由程式從歷程計算，不經過 AI。</p>
+    ${w.people.length?`<div class="summary-section"><h3>每人則數</h3>
+      <ul class="summary-counts">${w.people.map(p=>`<li><span>${esc(p.who)}</span><span class="num">${p.count} 則</span></li>`).join('')}</ul>
+      <p class="hint">依第一次發言的時間排列，不是排名。</p></div>`:''}`;
+}
+
+function summaryHeader(w){
+  const current=summaryLive(w);
+  return `<div class="summary-heading"><div><h2>${current?`本週至今 <span class="wk">${esc(w.w)}</span>`:esc(w.w)+' 摘要'}</h2>
+      <div class="meta num">${esc(w.range)}${current?'（截至 '+summaryDate(S.summaryData.today)+'）':''}・${w.stats.messages} 則・${w.stats.people} 人發言</div></div>
       ${current?summaryProgress():''}</div>
-    ${summaryStats(w)}
-    ${full&&ai?summaryTimeline(w.timeline):''}
-    ${full&&!w.low?summaryPeople(w.people):''}
-    ${ai?summaryAi(ai,full):''}
-    ${!full?`<p class="hint summary-message">本週 ${w.stats.people} 人發言</p>`+(ai?summaryTimeline(w.timeline.slice(0,2)):''):''}
-    ${w.low?summaryLow(w):''}
-    ${!configured?`<p class="hint summary-message">${SUMMARY_SETUP}</p>`:''}
-    ${configured&&w.error?`<p class="err summary-message" role="alert">${esc(w.error)}${ai?' 下方時間為上次成功產生的時間。':''}</p>`:''}
-    ${configured&&!w.low&&!ai&&!w.error?'<p class="hint summary-message">摘要尚未產生。</p>':''}
-    ${ai&&w.made?`<p class="hint summary-message">${esc(w.model)}・${current?'最後更新':'產生時間'} <time class="num" datetime="${esc(w.made)}">${summaryTime(w.made)}</time></p>`:''}
-    ${refresh||!full?`<div class="summary-actions">
-      ${refresh?`<button type="button" class="btn primary" data-summary-refresh="${esc(w.monday)}">${w.low?'更新歷程片段':current?'更新本週摘要':'重新產生'}</button>`:''}
-      ${!full?`<button type="button" class="btn" data-summary-view="${esc(w.monday)}">看完整摘要</button>
-        <button type="button" class="btn" data-summary-view="weeks">各週摘要 ›</button>`:''}
-    </div>`:''}
-    </section>`;
+    ${w.summary?`<p class="summary-headline">${esc(w.summary.headline)} ${summaryBadge()}</p>`:''}`;
+}
+
+function summaryMeta(w){
+  return w.summary&&w.made?`<p class="hint summary-message">${esc(w.model)}・最後產生 <time class="num" datetime="${esc(w.made)}">${summaryTime(w.made)}</time></p>`:'';
+}
+
+function summaryRefreshButton(w,primary){
+  const {configured}=S.summaryData;
+  if(!configured||w.low)return '';
+  return `<button type="button" class="btn${primary?' primary':''}" data-summary-refresh="${esc(w.monday)}">${summaryLive(w)?'現在更新摘要':'重新產生'}</button>`;
+}
+
+// 總覽's card: the week in one sentence, what waits for an answer, and whether the summary is behind.
+function summaryCard(w){
+  return `<section class="card summary-card">${summaryHeader(w)}
+    ${w.summary?summaryPending(w.summary.pending,2):''}
+    ${w.low?summaryLow(w):''}${summaryState(w)}
+    <div class="summary-actions">
+      ${w.summary?`<button type="button" class="btn primary" data-summary-view="${esc(w.monday)}">看完整摘要</button>`:''}
+      ${summaryRefreshButton(w,!w.summary)}
+      <button type="button" class="btn" data-summary-view="weeks">各週摘要 ›</button></div></section>`;
+}
+
+function summaryDetail(w){
+  const tab=SUMMARY_TABS.some(([id])=>id===S.summaryTab)?S.summaryTab:'talk';
+  return `<section class="card summary-card">${summaryHeader(w)}${summaryState(w)}
+    <div class="summary-tabs" role="tablist" aria-label="摘要內容">${SUMMARY_TABS.map(([id,label])=>
+      `<button type="button" role="tab" id="summaryTab-${id}" aria-selected="${id===tab}" aria-controls="summaryPanel" data-summary-tab="${id}">${label}</button>`).join('')}</div>
+    <div id="summaryPanel" role="tabpanel" aria-labelledby="summaryTab-${tab}" class="summary-panel">
+      ${tab==='talk'?summaryTalk(w):tab==='people'?summaryPeople(w):summaryData(w)}</div>
+    ${summaryMeta(w)}
+    ${summaryRefreshButton(w,false)?`<div class="summary-actions">${summaryRefreshButton(w,false)}</div>`:''}</section>`;
 }
 
 function summaryHome(){
@@ -429,6 +449,8 @@ async function loadSummary(mine){
   try{
     const data=await api('summaries');
     if(mine!==seq)return;
+    // An older backend answers in another shape; without `fresh` this page cannot draw it.
+    if(data.weeks.length&&!('fresh' in data.weeks[0])){box.remove();return;}
     S.summaryData=data;box.removeAttribute('aria-busy');summaryHome();
   }catch(error){
     if(mine!==seq)return;
@@ -442,39 +464,34 @@ function summaryScreen(){
   const returnButton=(target,label)=>`<button type="button" class="btn summary-return" data-summary-view="${target}">‹ ${label}</button>`;
   if(view==='weeks'){
     main.innerHTML=returnButton('home','返回總覽')+`<h2 class="summary-list-title">各週摘要</h2>
-      <div class="summary-weeks">${weeks.map(w=>{
-        const title=configured&&w.ai?.themes[0]?.title;
-        const button=`<button type="button" class="tile summary-week" data-summary-view="${esc(w.monday)}">
-          <span class="summary-heading"><strong>${esc(w.w)}</strong>${summaryLive(w)?summaryProgress():''}</span>
-          <span class="hint num">${esc(w.range)}・${w.stats.messages} 則</span>
-          <span class="hint">${title?esc(title):w.low?'少於 '+minMessages+' 則':configured?'摘要尚未產生':'尚未設定 OpenAI 金鑰'}</span>
-          ${title?summaryBadge():''}</button>`;
-        return w.low?`<div class="tile summary-week-low">${button}${summaryLow(w)}</div>`:button;
-      }).join('')}</div>`;
+      <div class="summary-weeks">${weeks.map(w=>`<button type="button" class="tile summary-week" data-summary-view="${esc(w.monday)}">
+          <span class="summary-heading"><strong>${esc(w.w)}</strong><span class="hint num">${esc(w.range)}・${w.stats.messages} 則</span>${summaryLive(w)?summaryProgress():''}</span>
+          <span class="summary-week-line">${w.summary?esc(w.summary.headline):w.low?'少於 '+minMessages+' 則，直接列出':configured?'摘要尚未產生':'尚未設定 OpenAI 金鑰'}</span>
+          ${w.summary&&w.summary.pending.length?`<span class="tag summary-role wait">還沒有人回應・${w.summary.pending.length}</span>`:''}</button>`).join('')}</div>`;
     return;
   }
   const index=weeks.findIndex(w=>w.monday===view),w=weeks[index];
   const older=weeks[index+1],newer=index>0?weeks[index-1]:null;
-  main.innerHTML=returnButton(S.summaryBack,S.summaryBack==='weeks'?'返回各週摘要':'返回總覽')+summaryCard(w,true)+
+  main.innerHTML=returnButton(S.summaryBack,S.summaryBack==='weeks'?'返回各週摘要':'返回總覽')+summaryDetail(w)+
     `<div class="summary-nav" role="group" aria-label="切換週次">
       ${older?`<button type="button" class="btn" data-summary-neighbor="${esc(older.monday)}">‹ 上一週 ${esc(older.w)}</button>`:''}
       ${newer?`<button type="button" class="btn" data-summary-neighbor="${esc(newer.monday)}">下一週 ${esc(newer.w)} ›</button>`:''}
     </div>`;
 }
 
-async function refreshSummary(day,btn){
+async function refreshSummary(day,btn,force){
   const mine=seq,label=btn.innerHTML;
   btn.disabled=true;btn.setAttribute('aria-busy','true');
   btn.innerHTML='<span class="summary-spinner" aria-hidden="true"></span>產生中…';
   try{
-    const w=await api('summaryRefresh',{monday:day});
+    const w=await api('summaryRefresh',force?{monday:day,force:true}:{monday:day});
     if(mine!==seq)return;
     const weeks=S.summaryData.weeks;
     weeks[weeks.findIndex(item=>item.monday===w.monday)]=w;
     S.summaryView?summaryScreen():summaryHome();
     main.querySelector('[data-summary-refresh]')?.focus({preventScroll:true});
     if(w.error)toast(w.error,'alert');
-    else toast(w.low?'已更新歷程片段':summaryLive(w)?'本週摘要已更新':'固定版已重新產生');
+    else toast(w.summary?'摘要已更新':'這週還沒有可以摘要的討論');
   }catch(error){
     if(mine!==seq)return;
     const message=error.code==='rate_limited'&&error.retryAt?error.message+' 請於 '+summaryTime(error.retryAt)+' 後再按。'
@@ -487,12 +504,12 @@ async function refreshSummary(day,btn){
 
 function summaryRefreshClick(day,btn){
   const w=S.summaryData.weeks.find(item=>item.monday===day);
-  if(w.low||summaryLive(w)){refreshSummary(day,btn);return;}
-  const close=sheet(`<h3 id="sheetTitle">重新產生固定版？</h3>
-    <p class="hint">新摘要產生後會取代 ${esc(w.w)} 的固定版。</p>
+  if(summaryLive(w)){refreshSummary(day,btn,false);return;}
+  const close=sheet(`<h3 id="sheetTitle">重新產生 ${esc(w.w)} 的摘要？</h3>
+    <p class="hint">這一週的每段討論都會重新送 AI 摘要，並取代現在的內容。</p>
     <div class="row"><button type="button" class="btn" data-close>取消</button>
     <button type="button" class="btn primary" id="summaryConfirm">重新產生</button></div>`);
-  $('summaryConfirm').addEventListener('click',()=>{close();refreshSummary(day,btn);});
+  $('summaryConfirm').addEventListener('click',()=>{close();refreshSummary(day,btn,true);});
 }
 
 const VIEW={
@@ -501,9 +518,10 @@ const VIEW={
     main.innerHTML=`<div class="search">${ic('search')}<label class="sr" for="q">搜尋訊息、檔名或姓名</label>
       <input id="q" type="search" enterkeyhint="search" placeholder="搜尋訊息、檔名或姓名" value="${esc(S.q)}" autocomplete="off"></div>
       <div class="chips">${chip('kind','all','全部',S.kind)}${chip('kind','text','文字',S.kind)}${chip('kind','upload','檔案與圖片',S.kind)}
+        ${S.day?`<button type="button" class="chip" data-unday aria-pressed="true">只看 ${esc(S.day.slice(5).replace('-','/'))}${ic('x')}<span class="sr">取消只看這一天</span></button>`:''}
         ${S.person?`<button type="button" class="chip" data-unperson aria-pressed="true">${esc(S.person.name)}${ic('x')}<span class="sr">取消只看此人</span></button>`:''}
         ${t?`<button type="button" class="chip" data-select aria-pressed="${S.select}">${S.select?'取消選取':'選取訊息廣播'}</button>`:''}</div><div id="list"></div>`;
-    fillList($('list'),logParams(),S.q||S.kind!=='all'||S.person?LOG_EMPTY:'這堂課還沒有紀錄。');actionbar();
+    fillList($('list'),logParams(),S.q||S.kind!=='all'||S.person||S.day?LOG_EMPTY:'這堂課還沒有紀錄。');actionbar();
   },
   files(){
     main.innerHTML=`<div class="chips">${chip('fkind','upload','全部',S.fileKind)}${chip('fkind','doc','文件',S.fileKind)}${chip('fkind','media','圖片與影音',S.fileKind)}</div>
@@ -662,7 +680,7 @@ async function castDialog(){
 }
 
 // ---------- events ----------
-$('tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.tab=b.dataset.tab;S.summaryView='';S.select=false;S.picked.clear();render();main.focus({preventScroll:true});});
+$('tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.tab=b.dataset.tab;S.summaryView='';S.day='';S.select=false;S.picked.clear();render();main.focus({preventScroll:true});});
 let deb;
 main.addEventListener('input',e=>{if(e.target.id!=='q')return;S.q=e.target.value;clearTimeout(deb);deb=setTimeout(()=>fillList($('list'),logParams(),LOG_EMPTY),500);});
 main.addEventListener('change',async e=>{
@@ -688,6 +706,9 @@ main.addEventListener('click',async e=>{
     S.summaryView=to==='home'?'':to;render();main.focus({preventScroll:true});return;
   }
   if('summaryRefresh' in d){summaryRefreshClick(d.summaryRefresh,t);return;}
+  if('summaryTab' in d){S.summaryTab=d.summaryTab;summaryScreen();$('summaryTab-'+d.summaryTab)?.focus({preventScroll:true});return;}
+  if('summaryLog' in d){S.tab='log';S.summaryView='';S.day=d.summaryLog;S.q='';S.kind='all';S.person=null;render();main.focus({preventScroll:true});return;}
+  if('unday' in d){S.day='';render();return;}
   if('summaryAll' in d){
     const expanded=t.getAttribute('aria-expanded')==='true';
     $('summaryPeople').querySelectorAll('[data-summary-extra]').forEach(row=>{row.hidden=expanded;});

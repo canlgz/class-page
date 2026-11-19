@@ -158,27 +158,11 @@ textarea.t{min-height:96px;resize:vertical}
 .summary-heat .low{background:var(--brand-soft);color:var(--brand)}
 .summary-heat .mid{background:var(--brand-soft);background:color-mix(in srgb,var(--ring) 32%,var(--surface));color:var(--ink)}
 .summary-heat .high{background:var(--brand);color:var(--on-brand)}
-.summary-ai{border-top:1px solid var(--line);padding-top:var(--s3);margin-top:var(--s4)}
-.summary-ai-compact .summary-topics li+li{margin-top:var(--s2)}
-.summary-ai-compact .summary-ratio{height:4px}
-.summary-topics{padding:0;margin:var(--s2) 0 0;list-style:none}
-.summary-topics li+li,.summary-section{margin-top:var(--s3)}
-.summary-topic{display:flex;align-items:baseline;flex-wrap:wrap;gap:0 var(--s2);font-size:14px}
-.summary-topic .hint{margin:0 0 0 auto}
-.summary-ratio{overflow:hidden;background:var(--brand-soft);border-radius:99px;height:6px;margin-top:var(--s1)}
-.summary-ratio i{display:block;height:100%;background:var(--brand);border-radius:inherit}
 .summary-section p,.summary-section ul{margin:var(--s1) 0 0;font-size:14px}
 .summary-section ul{padding-left:1.4em}
-.summary-section blockquote{margin:var(--s2) 0 0;padding:var(--s1) var(--s3);border-left:3px solid var(--brand);background:var(--surface-2)}
-.summary-section blockquote p{white-space:pre-wrap}
-.summary-section blockquote footer{font-size:13px;color:var(--ink-2)}
 .summary-section .summary-rows{list-style:none;padding:0}
-.summary-timeline,.summary-people{border-top:1px solid var(--line);padding-top:var(--s3);margin-top:var(--s4)}
 .summary-rows>li{padding:var(--s2) 0}
 .summary-rows>li+li{border-top:1px solid var(--line)}
-.summary-people .meta b{font-size:15px}
-.summary-people .summary-badge{padding:0 var(--s2);font-size:12px}
-.summary-inference{background:var(--warn-soft);color:var(--warn)}
 .summary-expand{margin-top:var(--s2)}
 .summary-actions,.summary-nav,.summary-message{margin-top:var(--s3)}
 .summary-return,.summary-list-title{margin-bottom:var(--s3)}
@@ -186,13 +170,49 @@ textarea.t{min-height:96px;resize:vertical}
 .summary-week{min-height:44px;min-width:0;text-align:left;display:grid;justify-items:start;align-content:start;padding:var(--s2) var(--s3)}
 .summary-week .summary-heading{width:100%}
 .summary-week .hint{display:block}
-.summary-week .summary-badge{margin-top:var(--s1)}
 .summary-week:active{background:var(--brand-soft)}
-.summary-week-low{grid-column:1/-1;min-width:0;overflow-wrap:anywhere}
-.summary-week-low .summary-week{width:100%;background:var(--surface-2)}
-.summary-week-low .summary-week:active{background:var(--brand-soft)}
 .summary-nav [data-summary-neighbor]:last-child:nth-child(2){margin-left:auto}
 .summary-spinner{width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;
   border-radius:50%;animation:summary-spin .8s linear infinite}
 @keyframes summary-spin{to{transform:rotate(1turn)}}
 @media (prefers-reduced-motion:reduce){.summary-spinner{animation:none}}
+.summary-headline{margin:var(--s3) 0 0;font-size:16px;line-height:1.6}
+.summary-headline .summary-badge{font-size:12px;padding:0 var(--s2);vertical-align:2px}
+.summary-pending{margin-top:var(--s3);padding:var(--s2) var(--s3);border-radius:8px;background:var(--warn-soft);font-size:14px}
+.summary-pending strong{display:flex;align-items:center;gap:var(--s1);color:var(--warn);font-size:13px}
+.summary-pending strong svg{width:16px;height:16px}
+.summary-pending ul{list-style:none;margin:var(--s1) 0 0;padding:0}
+.summary-pending li+li{margin-top:var(--s1)}
+.summary-tabs{display:flex;margin-top:var(--s4);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.summary-tabs button{flex:1;min-height:44px;border:0;background:transparent;font-size:14px;color:var(--ink-2)}
+.summary-tabs button+button{border-left:1px solid var(--line)}
+.summary-tabs button[aria-selected=true]{background:var(--brand-soft);color:var(--brand);font-weight:700}
+.summary-panel{margin-top:var(--s3)}
+.summary-thread{border:1px solid var(--line);border-radius:10px;padding:0 var(--s3);margin-top:var(--s2)}
+.summary-thread>summary{display:flex;gap:var(--s2);align-items:flex-start;min-height:44px;padding:var(--s2) 0;cursor:pointer;list-style:none}
+.summary-thread>summary::-webkit-details-marker{display:none}
+.summary-thread>summary strong{display:block;font-size:15px}
+.summary-thread>summary .hint{margin:0;white-space:nowrap}
+.summary-thread>summary .grow .hint{white-space:normal;display:block}
+.summary-thread[open]>summary{border-bottom:1px solid var(--line);margin-bottom:var(--s2)}
+.summary-view{border-left:3px solid var(--brand);padding-left:var(--s3);margin:var(--s2) 0}
+.summary-view+.summary-view{border-left-color:var(--warn)}
+.summary-view+.summary-view+.summary-view{border-left-color:var(--ok)}
+.summary-view p{margin:0;font-size:14px}
+.summary-outcome{margin:var(--s2) 0 0;font-size:14px;color:var(--ink-2)}
+.summary-source{padding-left:0;font-weight:600;color:var(--brand);min-height:44px}
+.summary-chips{display:flex;flex-wrap:wrap;gap:var(--s1);margin:var(--s1) 0}
+.summary-role{font-size:12px;padding:1px var(--s2);background:var(--brand-soft);color:var(--brand)}
+.summary-role.counter{background:var(--ok-soft);color:var(--ok)}
+.summary-role.wait{background:var(--warn-soft);color:var(--warn)}
+.summary-role.plain{background:var(--surface-2);color:var(--ink-2);font-weight:400}
+.summary-rows{list-style:none;padding:0;margin:var(--s2) 0 0}
+.summary-rows p{margin:var(--s1) 0 0;font-size:14px}
+.summary-silent{margin-top:var(--s3);border-top:1px solid var(--line);padding-top:var(--s2);font-size:14px}
+.summary-silent summary{min-height:44px;display:flex;align-items:center;cursor:pointer;color:var(--ink-2)}
+.summary-silent p{margin:0 0 var(--s1)}
+.summary-counts{list-style:none;padding:0;margin:var(--s2) 0 0;font-size:14px}
+.summary-counts li{display:flex;justify-content:space-between;padding:var(--s1) 0;border-top:1px solid var(--line)}
+.summary-weeks{grid-template-columns:minmax(0,1fr)}
+.summary-week-line{font-size:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.summary-week .summary-role{margin-top:var(--s1)}
