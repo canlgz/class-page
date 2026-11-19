@@ -98,7 +98,12 @@ function demoSummaries(){
       {time:d2+' 14:05',who:'林冠宇',text:'我們這組先把問題整理在共筆。'},
       {time:d2+' 14:12',who:'陳語彤',text:'收到，我晚點補上訪綱。'}]:[];
     const refreshed=demoSummaryRefreshes.get(demo.course)?.weeks.get(day);
-    const summary=low?null:{
+    const summary=low?{headline:'零星確認了訪談改成線上的安排。',threads:[],pending:[],
+        formative:{understanding:[{when:'零散訊息',text:'零星確認了訪談改成線上的安排。'}],stuck:[],next:['下週確認各組的訪談時間。']}}:{
+      formative:{understanding:[{when:d1+' 14:10',text:'多數人能說出計量式與硬式付費牆的差別，並用自己的訂閱經驗舉例。'},
+          {when:d1+' 20:05',text:'各組已經分好訪談與簡報的工作。'}],
+        stuck:['「讀者付錢買的是內容還是免於廣告」還分不清，討論時兩者常混在一起。','期中報告的格式要求還不清楚。'],
+        next:['下次可以用一份媒體的收入結構，把訂閱收入和廣告收入分開來看。']},
       headline:'這週從「付費牆要擋多少」談到「讀者到底為什麼付錢」，對免費篇數的看法分歧。',
       threads:[
         {title:'付費牆要擋多少',starter:'老師',from:d1+' 14:10',to:d1+' 15:40',outcome:'split',note:'沒有結論，可在下週接續。',positions:[
@@ -123,8 +128,8 @@ function demoSummaries(){
     weeks.push({monday:day,w:'W'+(1+(Date.parse(day)-Date.parse(week1))/6048e5),
       range:summaryDate(day)+'–'+summaryDate(summaryDay(day,6)),kind:i===0?'live':'final',low,
       stats:{messages,people:people.length,days,peak:{day:summaryDay(day,peakIndex),hour:low?9:14,count:low?2:Math.ceil(days[peakIndex]/3)}},
-      lines,summary,people,silent:low?[]:['吳承恩','鄭雅文','劉冠廷'],fresh:i===0&&!refreshed?12:0,loose:low?0:7,waiting:i===0&&!refreshed,
-      model:low?null:'gpt-6.2-sol',made:low?null:refreshed||(i===0?new Date(Date.now()-3600e3).toISOString():summaryDay(day,5)+'T08:00:00.000Z'),error:null});
+      lines,summary,people,silent:low?[]:['吳承恩','鄭雅文','劉冠廷'],fresh:i===0&&!refreshed?12:0,loose:low?messages:7,looseDone:i>0,waiting:i===0&&!refreshed,
+      model:low?'gpt-6-luna':'gpt-6.2-sol',made:refreshed||(i===0?new Date(Date.now()-3600e3).toISOString():summaryDay(day,5)+'T08:00:00.000Z'),error:null});
   }
   return {configured:true,week1,today,minMessages,quietMinutes:60,weeks};
 }
@@ -355,10 +360,22 @@ function summaryState(w){
   return parts.join('');
 }
 
+// 形成性摘要: where the class stands. Older saved summaries may not carry one.
+function summaryFormative(w){
+  const f=w.summary?.formative;
+  if(!f||!f.understanding.length)return '';
+  const list=items=>items.length>1?`<ul>${items.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`:`<p>${esc(items[0])}</p>`;
+  return `<div class="summary-formative">
+    <div class="summary-heading"><h3>形成性摘要</h3>${summaryBadge()}</div>
+    <h4>目前的理解</h4>${f.understanding.length>1?`<ul>${f.understanding.map(u=>`<li><span class="hint num">${esc(u.when)}</span> ${esc(u.text)}</li>`).join('')}</ul>`:`<p>${esc(f.understanding[0].text)}</p>`}
+    ${f.stuck.length?`<h4>還卡在哪</h4>${list(f.stuck)}`:''}
+    ${f.next.length?`<h4>下一步</h4>${list(f.next)}`:''}</div>`;
+}
+
 function summaryTalk(w){
   const s=w.summary;
   if(!s)return w.low?summaryLow(w):'';
-  return summaryPending(s.pending,5)+s.threads.map((t,i)=>{
+  return summaryFormative(w)+summaryPending(s.pending,5)+s.threads.map((t,i)=>{
     const who=[...new Set([t.starter,...t.positions.flatMap(p=>p.who)].filter(Boolean))];
     return `<details class="summary-thread"${i===0?' open':''}>
       <summary><span class="grow"><strong>${esc(t.title)}</strong>
@@ -369,11 +386,10 @@ function summaryTalk(w){
       ${t.note?`<p class="summary-outcome">→ ${esc(t.note)}</p>`:''}
       <button type="button" class="linkbtn summary-source" data-summary-log="${esc(summaryIso(w,t.from.slice(0,5)))}">看這天的原始對話</button>
     </details>`;}).join('')+
-    (w.loose?`<p class="hint summary-message">另有 ${w.loose} 則零散訊息沒有納入摘要。</p>`:'');
+    (w.low?summaryLow(w):w.loose?`<p class="hint summary-message">另有 ${w.loose} 則零散訊息，${w.looseDone?'已併入上面的形成性摘要。':summaryLive(w)?'週結束後會合成一份形成性摘要。':'還沒有納入摘要。'}</p>`:'');
 }
 
 function summaryPeople(w){
-  if(w.low)return summaryLow(w);
   const names=o=>Object.keys(o);
   return `<p class="hint">${w.people.length} 人發言，依第一次發言的時間排列。標籤說的是這個人的發言在討論裡的作用${w.summary?'（AI 摘要）':''}；誰回應誰由歷程計算。</p>
     <ul class="summary-rows" id="summaryPeople">${w.people.map((p,i)=>`<li${i>=8?' data-summary-extra hidden':''}>
@@ -383,7 +399,7 @@ function summaryPeople(w){
         ${p.followed?`<span class="tag summary-role plain">被 ${p.followed} 人回應</span>`:''}
         ${names(p.repliesTo).length?`<span class="tag summary-role plain">回應 ${esc(names(p.repliesTo).slice(0,3).join('、'))}</span>`:''}
         ${names(p.mentions).length?`<span class="tag summary-role plain">提到 ${esc(names(p.mentions).slice(0,3).join('、'))}</span>`:''}</div>
-      ${p.notes.map(n=>`<p>在「${esc(n.thread)}」${esc(n.note)}</p>`).join('')}</li>`).join('')}</ul>
+      ${p.notes.map(n=>`<p>${n.thread?`在「${esc(n.thread)}」`:''}${esc(n.note)}</p>`).join('')}</li>`).join('')}</ul>
     ${w.people.length>8?`<button type="button" class="btn block summary-expand" data-summary-all="${w.people.length}"
       aria-controls="summaryPeople" aria-expanded="false">顯示全部 ${w.people.length} 人</button>`:''}
     ${w.silent&&w.silent.length?`<details class="summary-silent"><summary>本週沒有發言：${w.silent.length} 人</summary>
@@ -411,13 +427,14 @@ function summaryMeta(w){
 
 function summaryRefreshButton(w,primary){
   const {configured}=S.summaryData;
-  if(!configured||w.low)return '';
+  if(!configured||w.stats.messages<3)return '';
   return `<button type="button" class="btn${primary?' primary':''}" data-summary-refresh="${esc(w.monday)}">${summaryLive(w)?'現在更新摘要':'重新產生'}</button>`;
 }
 
 // 總覽's card: the week in one sentence, what waits for an answer, and whether the summary is behind.
 function summaryCard(w){
   return `<section class="card summary-card">${summaryHeader(w)}
+    ${w.summary?.formative?.stuck?.length?`<p class="summary-stuck"><b>還卡在哪</b>　${esc(w.summary.formative.stuck[0])}</p>`:''}
     ${w.summary?summaryPending(w.summary.pending,2):''}
     ${w.low?summaryLow(w):''}${summaryState(w)}
     <div class="summary-actions">
