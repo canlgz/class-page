@@ -86,7 +86,7 @@ const demo={teacher:QUERY.get('demo')==='teacher',nick:QUERY.get('demo')==='teac
 const DEMO_COURSES=[['a','媒體產業研究',0,'10:42'],['b','數位敘事工作坊',-1,'16:05'],['c','傳播理論',-4,'09:30']];
 async function demoApi(action,b={}){
   await new Promise(r=>setTimeout(r,500));
-  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast'].includes(action))
+  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend'].includes(action))
     throw Object.assign(new Error('這個功能只有老師能用。'),{code:'teacher_only'});
   const pub=({...r})=>r;
   switch(action){
@@ -97,7 +97,7 @@ async function demoApi(action,b={}){
     case 'overview':{const t=FAKE.filter(r=>r.day===today);
       return {today:{messages:t.filter(r=>!r.upload).length,uploads:t.filter(r=>r.upload).length,people:new Set(t.map(r=>r.who)).size,last:t[0].time},
         week:[-6,-5,-4,-3,-2,-1,0].map(d=>({day:taipei(d),count:FAKE.filter(r=>r.day===taipei(d)).length})),
-        roster:DEMO_PEOPLE.map((who,i)=>{const a=FAKE.filter(r=>r.who===who);return {person:i+3,who,messages:a.filter(r=>!r.upload).length,files:a.filter(r=>r.upload).length,last:a[0]?{day:a[0].day,time:a[0].time}:null};})
+        meet:demo.meet||'',roster:DEMO_PEOPLE.map((who,i)=>{const a=FAKE.filter(r=>r.who===who);return {person:i+3,who,messages:a.filter(r=>!r.upload).length,files:a.filter(r=>r.upload).length,last:a[0]?{day:a[0].day,time:a[0].time}:null};})
           .sort((x,y)=>y.messages+y.files-x.messages-x.files)};}
     case 'handin':{const done=[],missing=[];DEMO_PEOPLE.forEach((who,i)=>{const r=FAKE.find(x=>x.who===who&&x.upload&&x.day>=b.from&&x.day<=b.to);
       r?done.push({person:i+3,who,file:r.text,day:r.day,time:r.time}):missing.push({person:i+3,who});});return {from:b.from,to:b.to,done,missing};}
@@ -106,6 +106,11 @@ async function demoApi(action,b={}){
     case 'poke':return {sent:true};
     case 'saveSettings':if(b.name!=null)demo.name=b.name;if(b.forward!=null)demo.forward=b.forward;if(b.week1!=null)demo.week1=b.week1&&monday(b.week1);return {name:demo.name,forward:demo.forward,...(b.week1!=null?{week1:demo.week1||monday(taipei(-66)),week1Auto:!demo.week1}:{})};
     case 'broadcast':return {sent:b.rows.length};
+    case 'meetSave':{const m=/^(?:https?:\/\/)?meet\.google\.com\/([a-z]{3}-[a-z]{4}-[a-z]{3})(?:[/?#].*)?$/i.exec(String(b.url||'').trim());
+      if(String(b.url||'').trim()===''){demo.meet='';return {meet:''};}
+      if(!m)throw Object.assign(new Error('請貼上 Google Meet 的會議連結，例如 https://meet.google.com/abc-defg-hij'),{code:'invalid'});
+      demo.meet='https://meet.google.com/'+m[1].toLowerCase();return {meet:demo.meet};}
+    case 'meetSend':if(!demo.meet)throw Object.assign(new Error('請先存一個 Google Meet 連結。'),{code:'invalid'});return {sent:true};
     default:if(typeof demoRoll==='function'){const r=demoRoll(action,b);if(r!==undefined)return r;}
   }
   const q=(b.q||'').trim().toLowerCase(),size=5,start=b.offset||0,person=b.person!=null?DEMO_PEOPLE[b.person-3]:'';
@@ -187,6 +192,38 @@ const nickForm=()=>`<h2>我的暱稱</h2>
         <p class="err" id="nickErr" role="alert" hidden></p>
         <button class="btn primary block" style="margin-top:12px" type="submit">儲存暱稱</button>
       </form>`;
+// 總覽's Google Meet card: one saved link per class, posted into the group on 發到群組 (after a
+// confirmation that shows the exact message). Backend: botLiffMeetSave_ / botLiffMeetSend_.
+const meetText=url=>`【線上上課】${S.info.course}\nGoogle Meet 會議連結：\n${url}`;
+function meetCard(){
+  const editing=S.meetEdit||!S.meet;
+  return `<section id="meetCard"><h2>線上上課</h2>${editing
+    ?`<form class="card" id="meetForm" novalidate>
+        <label class="f" for="meetUrl" style="margin-top:0">Google Meet 會議連結</label>
+        <input class="t" id="meetUrl" type="url" inputmode="url" autocomplete="off" spellcheck="false" value="${esc(S.meet)}"
+          placeholder="https://meet.google.com/abc-defg-hij" aria-describedby="meetHelp meetErr">
+        <p class="hint" id="meetHelp">貼上一次就會記住。之後每次上課，按「發到群組」就好。</p>
+        <p class="err" id="meetErr" role="alert" hidden></p>
+        <button class="btn primary block" style="margin-top:12px" type="submit">儲存連結</button>
+        ${S.meet?`<div class="rowline" style="margin-top:8px"><button type="button" class="btn grow" data-meetcancel>取消</button>
+          <button type="button" class="btn" data-meetremove style="color:var(--danger)">移除連結</button></div>`:''}
+      </form>`
+    :`<div class="card"><div class="f" style="margin-top:0">Google Meet 會議連結</div>
+        <p class="num" style="margin:4px 0 12px;word-break:break-all">${esc(S.meet)}</p>
+        <button type="button" class="btn primary block" data-meetsend>${ic('send')}發到群組</button>
+        <button type="button" class="btn block" style="margin-top:8px" data-meetedit>${ic('edit')}更改連結</button></div>`}</section>`;
+}
+function meetRepaint(){const el=$('meetCard');if(el)el.outerHTML=meetCard();}
+function meetSendDialog(){
+  const close=sheet(`<h3 id="sheetTitle">把會議連結發到群組？</h3>
+    <div class="card" style="white-space:pre-wrap;word-break:break-all;font-size:14px;margin:8px 0">${esc(meetText(S.meet))}</div>
+    <p class="hint">群組裡每個人都會看到。會用掉一則 LINE 訊息額度。</p>
+    <p class="err" id="meetSendErr" role="alert" hidden></p>
+    <div class="row"><button type="button" class="btn" data-close>取消</button><button type="button" class="btn primary" id="meetGo">${ic('send')}發送</button></div>`);
+  $('meetGo').addEventListener('click',e=>busy(e.currentTarget,async()=>{
+    try{await api('meetSend');close();toast('已發到群組');}
+    catch(error){const el=$('meetSendErr');el.textContent=error.message;el.hidden=false;}}));
+}
 const VIEW={
   log(){
     const t=asTeacher();
@@ -219,8 +256,8 @@ const VIEW={
     const mine=++seq;skeleton(main,[76,76,150,56,56]);
     try{
       const o=await api('overview');if(mine!==seq)return;main.removeAttribute('aria-busy');
-      const max=Math.max(1,...o.week.map(w=>w.count));
-      main.innerHTML=`<h2>今天</h2><div class="tiles">
+      const max=Math.max(1,...o.week.map(w=>w.count));S.meet=o.meet||'';S.meetEdit=false;
+      main.innerHTML=`${meetCard()}<h2>今天</h2><div class="tiles">
           <div class="tile"><div class="k">訊息</div><div class="v">${o.today.messages} <small>則</small></div></div>
           <div class="tile"><div class="k">發言人數</div><div class="v">${o.today.people} <small>人</small></div></div>
           <div class="tile"><div class="k">上傳檔案</div><div class="v">${o.today.uploads} <small>個</small></div></div>
@@ -369,6 +406,10 @@ main.addEventListener('change',async e=>{
 });
 main.addEventListener('click',async e=>{
   const t=e.target.closest('button');if(!t)return;const d=t.dataset;
+  if('meetsend' in d){meetSendDialog();return;}
+  if('meetedit' in d){S.meetEdit=true;meetRepaint();$('meetUrl').focus();return;}
+  if('meetcancel' in d){S.meetEdit=false;meetRepaint();return;}
+  if('meetremove' in d){busy(t,async()=>{try{await api('meetSave',{url:''});S.meet='';S.meetEdit=false;meetRepaint();toast('已移除會議連結');}catch(error){toast(error.message,'alert');}});return;}
   if('kind' in d){S.kind=d.kind;render();}
   else if('fkind' in d){S.fileKind=d.fkind;render();}
   else if('range' in d){S.range=d.range;render();}
@@ -402,6 +443,13 @@ main.addEventListener('submit',e=>{
   e.preventDefault();const form=e.target,btn=form.querySelector('[type=submit]');
   const fail=(errId,fieldId,text)=>{const el=$(errId);el.textContent=text;el.hidden=false;$(fieldId).setAttribute('aria-invalid','true');$(fieldId).focus();};
   const clear=(errId,fieldId)=>{$(errId).hidden=true;$(fieldId).removeAttribute('aria-invalid');};
+  if(form.id==='meetForm'){
+    const v=$('meetUrl').value.trim();
+    if(!v)return fail('meetErr','meetUrl','請貼上 Google Meet 的會議連結。');
+    busy(btn,async()=>{try{const r=await api('meetSave',{url:v});S.meet=r.meet;S.meetEdit=false;meetRepaint();toast('已儲存會議連結');}
+      catch(error){fail('meetErr','meetUrl',error.message);}});
+    return;
+  }
   if(form.id==='nickForm'){
     const v=$('nick').value.trim();
     if(v.length<2)return fail('nickErr','nick','暱稱至少要兩個字。');
