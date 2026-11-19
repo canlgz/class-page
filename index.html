@@ -194,7 +194,9 @@ const nickForm=()=>`<h2>我的暱稱</h2>
       </form>`;
 // 總覽's Google Meet card: one saved link per class, posted into the group on 發到群組 (after a
 // confirmation that shows the exact message). Backend: botLiffMeetSave_ / botLiffMeetSend_.
-const meetText=url=>`【線上上課】${S.info.course}\nGoogle Meet 會議連結：\n${url}`;
+// Same text as botLiffMeetText_: class, then 第 N 週・M/D（週）, then the link.
+const meetText=url=>{const [,m,d]=today.split('-').map(Number),w=week(today);
+  return `【線上上課】${S.info.course}\n${w?'第 '+w.slice(1)+' 週・':''}${m}/${d}（${'日一二三四五六'[new Date(today+'T00:00:00Z').getUTCDay()]}）\nGoogle Meet 會議連結：\n${url}`;};
 function meetCard(){
   const editing=S.meetEdit||!S.meet;
   return `<section id="meetCard"><h2>線上上課</h2>${editing
