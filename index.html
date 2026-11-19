@@ -267,7 +267,10 @@ const VIEW={
         <p class="err" id="pokeErr" role="alert" hidden></p>
         <button class="btn primary block" style="margin-top:12px" type="submit">${ic('send')}送出</button>
       </form>`;
-    stats();fillList($('list'),{mine:true},'你在這堂課還沒有被備份到的訊息。在群組傳一則訊息後再回來看看。');
+    // The records above load later and push the poke box down; arriving from 私下戳戳老師 (the poke
+    // box still focused), bring it back into view once they are in.
+    Promise.allSettled([stats(),fillList($('list'),{mine:true},'你在這堂課還沒有被備份到的訊息。在群組傳一則訊息後再回來看看。')])
+      .then(()=>{const box=$('poke');if(S.tab==='me'&&box&&document.activeElement===box)box.closest('form').scrollIntoView({block:'center'});});
   },
   async home(){
     const mine=++seq;skeleton(main,[76,76,150,56,56]);
