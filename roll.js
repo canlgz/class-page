@@ -6,6 +6,7 @@
 // 沒有 P 格的舊配置圖，講台畫在最上方。
 // 線上上課（layout.online）：沒有配置圖，學生按「我到了」，依到的順序拿到虛擬座位「線上1」「線上2」…；
 // 老師看到的是依序排列的名字格，抽籤、補簽到、取消都照常。
+// 線上點名有 4 位數簽到碼：只顯示在老師畫面，老師口頭唸出，學生輸入正確才簽得到。
 
 const R={state:null,timer:null,poll:null,flip:false,edit:null,tool:'1',spinning:false};
 function rollLeave(){clearInterval(R.timer);clearInterval(R.poll);R.timer=R.poll=null;}
@@ -81,14 +82,16 @@ async function rollRefresh(){
     const next=await api('rollcall');
     if(S.tab!=='roll'||R.spinning)return;
     const wasOpen=R.state&&R.state.open;R.state=next;
-    if(!R.edit&&!document.querySelector('.scrim'))rollPaint();
+    const typing=document.activeElement&&document.activeElement.id==='checkinCode'&&wasOpen&&next.open&&!next.mine;
+    if(!R.edit&&!document.querySelector('.scrim')&&!typing)rollPaint();
     if(wasOpen!==next.open)rollWatch();
   }catch(error){/* the next tick tries again */}
 }
 function rollTake(state){R.state=state;rollPaint();rollWatch();}
 function rollPaint(){
-  const keep=window.scrollY;
+  const keep=window.scrollY,typed=$('checkinCode')&&$('checkinCode').value;
   main.innerHTML=asTeacher()?(R.edit?editorHtml():teacherHtml(R.state)):studentHtml(R.state);
+  if(typed&&$('checkinCode'))$('checkinCode').value=typed;
   window.scrollTo(0,keep);
 }
 
@@ -116,6 +119,11 @@ function onlineStudentHtml(st){
   const n=st.mine?st.mine.slice(ONLINE.length):'';
   if(st.open)return `<div class="card"><div class="rowline"><span class="tag ok">${ic('ok')}線上點名中</span><span>剩 <b class="num" id="rollLeft">${mmss(st.endsIn)}</b></span></div>
     ${st.mine?`<p class="big" style="margin:8px 0 0">已簽到，你是第 ${n} 位</p><p class="hint">這樣就好了，不用再按。</p>`
+      :st.needCode?`<form id="checkinForm" novalidate><label class="f" for="checkinCode" style="margin-top:8px">輸入老師說的簽到碼</label>
+          <input class="t num" id="checkinCode" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="4 位數字"
+            style="font-size:28px;letter-spacing:.4em;text-align:center" aria-describedby="checkinErr">
+          <p class="err" id="checkinErr" role="alert" hidden></p>
+          <button type="submit" class="btn primary block" style="margin-top:12px;min-height:56px;font-size:18px">${ic('ok')}我到了</button></form>`
       :`<p class="big" style="margin:8px 0 0">線上上課，按一下簽到</p>
         <button type="button" class="btn primary block" style="margin-top:12px;min-height:56px;font-size:18px" data-checkin>${ic('ok')}我到了</button>`}
     <p class="hint">已經有 ${st.taken.length} 人簽到。</p></div>`;
@@ -134,7 +142,9 @@ function teacherHtml(st){
         ?`<span class="tag ok">${ic('ok')}點名中</span><span>剩 <b class="num" id="rollLeft">${mmss(st.endsIn)}</b></span><span class="grow"></span><button type="button" class="btn" data-rollstop>結束點名</button>`
         :`<span class="tag no">已結束</span><span>${dayWeek(st.day)} ${esc(st.key)}</span>`}</div>
       <div class="tiles" style="margin-top:12px"><div class="tile"><div class="k">${did}</div><div class="v">${st.pins.length} <small>人</small></div></div>
-        <div class="tile"><div class="k">${online?'還沒簽到':'還沒點'}</div><div class="v">${st.absent.length} <small>人</small></div></div></div></div>
+        <div class="tile"><div class="k">${online?'還沒簽到':'還沒點'}</div><div class="v">${st.absent.length} <small>人</small></div></div></div>
+      ${st.open&&st.code?`<div style="margin-top:12px;text-align:center"><div class="hint" style="margin:0">簽到碼（唸給同學聽）</div>
+        <div class="num" style="font-size:44px;font-weight:700;letter-spacing:.25em;line-height:1.2" aria-label="簽到碼 ${[...st.code].join(' ')}">${esc(st.code)}</div></div>`:''}</div>
       <div class="card" aria-live="polite"><div class="hint" style="margin:0">抽籤</div>
         <div class="big" id="drawWho">${st.last?esc(st.last.who):'還沒抽'}</div>
         <div class="hint" id="drawSeat">${st.last?seatName(st.last.seat):`只會抽到這次${online?'有簽到':'有點位置'}的人，抽過的不會再抽到。`}</div>
@@ -346,11 +356,20 @@ main.addEventListener('click',async e=>{
 });
 main.addEventListener('submit',e=>{
   const form=e.target,btn=form.querySelector('[type=submit]');
+  if(form.id==='checkinForm'){
+    e.preventDefault();
+    const input=$('checkinCode'),err=$('checkinErr'),code=input.value.replace(/\s/g,'');
+    const fail=text=>{err.textContent=text;err.hidden=false;input.setAttribute('aria-invalid','true');input.focus();};
+    if(!/^\d{4}$/.test(code))return fail('請輸入老師說的 4 位數字。');
+    busy(btn,async()=>{try{const next=await api('pin',{code});rollTake(next);toast('已簽到，你是第 '+next.mine.slice(ONLINE.length)+' 位');}
+      catch(error){if(error.code==='wrong_code'||error.code==='code_locked'){fail(error.message);input.select();}else{toast(error.message,'alert');rollRefresh();}}});
+    return;
+  }
   if(form.id==='rollStart'){
     e.preventDefault();
     // Read the form first: the page is redrawn without it once the roll call starts.
     const layout=$('rollLayout').value,minutes=+$('rollMinutes').value;
-    busy(btn,async()=>{try{rollTake(await api('rollStart',{layout,minutes}));toast(layout==='online'?'開始線上點名，請學生打開課堂頁面的「點名」按「我到了」':'開始點名，請學生打開課堂頁面的「點名」');window.scrollTo(0,0);}
+    busy(btn,async()=>{try{rollTake(await api('rollStart',{layout,minutes}));toast(layout==='online'?'開始線上點名，把畫面上的簽到碼唸給同學聽':'開始點名，請學生打開課堂頁面的「點名」');window.scrollTo(0,0);}
       catch(error){toast(error.message,'alert');}});
   }else if(form.id==='layoutForm'){
     e.preventDefault();
@@ -377,8 +396,9 @@ function demoRoll(action,b){
   const fail=(code,text)=>{throw Object.assign(new Error(text),{code});};
   const state=()=>{
     const cur=DR.session,st={open:!!cur&&!cur.closed&&Date.now()<cur.end,mine:(DR.pins.find(p=>p.who===me)||{}).seat||''};
-    if(cur)Object.assign(st,{day:cur.day,key:cur.key,endsIn:Math.max(0,Math.round((cur.end-Date.now())/1000)),layout:cur.layout,taken:DR.pins.map(p=>p.seat)});
+    if(cur)Object.assign(st,{day:cur.day,key:cur.key,endsIn:Math.max(0,Math.round((cur.end-Date.now())/1000)),layout:cur.layout,taken:DR.pins.map(p=>p.seat)},cur.code?{needCode:true}:{});
     if(!teacher)return st;
+    if(cur&&cur.code)st.code=cur.code;
     return Object.assign(st,{pins:DR.pins.map(p=>({seat:p.seat,who:p.who,person:person(p.who),time:p.time})),
       absent:DEMO_PEOPLE.filter(w=>!DR.pins.some(p=>p.who===w)).map(w=>({person:person(w),who:w})),
       drawn:cur?DR.pins.filter(p=>cur.drawn.includes(p.who)).map(p=>p.seat):[],
@@ -392,9 +412,11 @@ function demoRoll(action,b){
   switch(action){
     case 'rollcall':return state();
     case 'pin':if(!open)fail('closed','現在不是點名時間。');
-      if(s.layout.online){if(!DR.pins.some(p=>p.who===me))put(me,next(),'10:05');}else put(me,b.seat,'10:05');return state();
+      if(s.layout.online){if(!DR.pins.some(p=>p.who===me)){
+        if(s.code&&String(b.code||'')!==s.code)fail('wrong_code','簽到碼不對，請再聽一次老師說的數字。');put(me,next(),'10:05');}}
+      else put(me,b.seat,'10:05');return state();
     case 'rollStart':DR.def=b.layout;DR.pins=[];DR.session={day:today,key:'10:'+(20+DR.n++),end:Date.now()+b.minutes*60e3,closed:false,
-      layout:b.layout==='online'?{name:'線上',online:true}:DR.layouts[b.layout],drawn:[],last:null};return state();
+      layout:b.layout==='online'?{name:'線上',online:true}:DR.layouts[b.layout],drawn:[],last:null,code:b.layout==='online'?String(1000+Math.floor(Math.random()*9000)):''};return state();
     case 'rollStop':s.closed=true;return state();
     case 'rollDraw':{const left=DR.pins.filter(p=>!s.drawn.includes(p.who));if(!left.length)fail('all_drawn','每個人都抽過了。按「重新開始」可以再抽一輪。');
       const pick=left[Math.floor(Math.random()*left.length)];s.drawn.push(pick.who);s.last=pick.who;return {seat:pick.seat,who:pick.who,left:left.length-1,state:state()};}
