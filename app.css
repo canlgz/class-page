@@ -138,3 +138,48 @@ textarea.t{min-height:96px;resize:vertical}
 .vseats{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px}
 .seat.name{aspect-ratio:auto;min-height:48px;padding:4px 8px;font-size:14px;gap:6px;justify-content:flex-start;text-align:left;white-space:nowrap;text-overflow:ellipsis}
 .seat.name small{font-size:11px;opacity:.7;flex:none}
+
+/* ---- 每週 AI 摘要 ---- */
+#weeklySummary:not(:empty){margin-top:var(--s3)}
+.summary-card,.summary-week{overflow-wrap:anywhere}
+.summary-heading,.summary-actions,.summary-nav{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s2)}
+.summary-heading{justify-content:space-between}
+.summary-heading h2,.summary-list-title{margin:0;color:var(--ink);font-size:17px}
+.summary-heading h3,.summary-section h3{font-size:15px;margin:0}
+.summary-progress,.summary-badge{white-space:nowrap}
+.summary-badge{color:var(--brand);background:var(--brand-soft)}
+.summary-stats{margin-top:var(--s3);grid-template-columns:repeat(2,minmax(0,1fr))}
+.summary-stats .tile{padding:var(--s2) var(--s3)}
+.summary-heat{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:var(--s1);margin:var(--s3) 0 var(--s2)}
+.summary-heat>div{min-height:50px;display:grid;align-content:center;text-align:center;line-height:1.4;
+  background:var(--surface-2);color:var(--ink-2);border:1px solid transparent;border-radius:8px;font-size:12px}
+.summary-heat strong{font-size:13px}
+.summary-heat .future{background:var(--surface);border:1px dashed var(--line)}
+.summary-heat .low{background:var(--brand-soft);color:var(--brand)}
+.summary-heat .mid{background:var(--brand-soft);background:color-mix(in srgb,var(--ring) 32%,var(--surface));color:var(--ink)}
+.summary-heat .high{background:var(--brand);color:var(--on-brand)}
+.summary-ai{border-top:1px solid var(--line);padding-top:var(--s3);margin-top:var(--s4)}
+.summary-topics{padding:0;margin:var(--s2) 0 0;list-style:none}
+.summary-topics li+li,.summary-section{margin-top:var(--s3)}
+.summary-topic{display:flex;align-items:baseline;flex-wrap:wrap;gap:0 var(--s2);font-size:14px}
+.summary-topic .hint{margin:0 0 0 auto}
+.summary-ratio{overflow:hidden;background:var(--brand-soft);border-radius:99px;height:6px;margin-top:var(--s1)}
+.summary-ratio i{display:block;height:100%;background:var(--brand);border-radius:inherit}
+.summary-section p,.summary-section ul{margin:var(--s1) 0 0;font-size:14px}
+.summary-section ul{padding-left:1.4em}
+.summary-section blockquote{margin:var(--s2) 0 0;padding:var(--s1) var(--s3);border-left:3px solid var(--brand);background:var(--surface-2)}
+.summary-section blockquote p{white-space:pre-wrap}
+.summary-section blockquote footer{font-size:13px;color:var(--ink-2)}
+.summary-actions,.summary-nav,.summary-message{margin-top:var(--s3)}
+.summary-return,.summary-list-title{margin-bottom:var(--s3)}
+.summary-weeks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s2)}
+.summary-week{min-height:44px;min-width:0;text-align:left;display:grid;justify-items:start;align-content:start;padding:var(--s2) var(--s3)}
+.summary-week .summary-heading{width:100%}
+.summary-week .hint{display:block}
+.summary-week .summary-badge{margin-top:var(--s1)}
+.summary-week:active{background:var(--brand-soft)}
+.summary-nav [data-summary-neighbor]:last-child:nth-child(2){margin-left:auto}
+.summary-spinner{width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;
+  border-radius:50%;animation:summary-spin .8s linear infinite}
+@keyframes summary-spin{to{transform:rotate(1turn)}}
+@media (prefers-reduced-motion:reduce){.summary-spinner{animation:none}}

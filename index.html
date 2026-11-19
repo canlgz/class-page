@@ -57,7 +57,7 @@ const DEMO=QUERY.has('demo')||!CFG.liffId||!CFG.api;
 const auth={idToken:'',course:''};
 
 async function realApi(action,body={}){
-  const stop=new AbortController(),timer=setTimeout(()=>stop.abort(),25000);
+  const stop=new AbortController(),timer=setTimeout(()=>stop.abort(),action==='summaryRefresh'?270000:25000);
   let reply;
   try{
     // text/plain keeps this a "simple" request: GAS web apps cannot answer a CORS preflight.
@@ -66,7 +66,7 @@ async function realApi(action,body={}){
     reply=await res.json();
   }catch(error){throw Object.assign(new Error(error.name==='AbortError'?'等太久了，機器人沒有回應。':'連不上機器人，請檢查網路。'),{code:'network'});}
   finally{clearTimeout(timer);}
-  if(!reply.ok)throw Object.assign(new Error(reply.message||'發生錯誤'),{code:reply.error});
+  if(!reply.ok)throw Object.assign(new Error(reply.message||'發生錯誤'),{code:reply.error,retryAt:reply.retryAt});
   return reply.data;
 }
 
@@ -84,9 +84,37 @@ const FAKE=[
 ].map((r,i,a)=>({row:9+a.length-i,day:taipei(r[0]),time:r[1],who:r[2],type:r[3],text:r[4],upload:r[3]!=='text',mine:r[2]===(QUERY.get('demo')==='teacher'?'老師':'陳語彤')}));
 const demo={teacher:QUERY.get('demo')==='teacher',nick:QUERY.get('demo')==='teacher'?'老師':'陳語彤',name:'媒體產業研究',forward:-1,course:'a'};
 const DEMO_COURSES=[['a','媒體產業研究',0,'10:42'],['b','數位敘事工作坊',-1,'16:05'],['c','傳播理論',-4,'09:30']];
+const demoSummaryRefreshes=new Map();
+function demoSummaries(){
+  const current=monday(today),week1=demo.week1||monday(taipei(-66)),weeks=[];
+  for(let day=current,i=0;day>=week1;day=summaryDay(day,-7),i++){
+    const days=(i===0?[38,86,21,124,8,0,5]:i%4===2?[3,0,2,4,0,0,0]:[12,47,119,64,18,0,3])
+      .map((n,k)=>summaryDay(day,k)>today?null:n);
+    const messages=days.reduce((sum,n)=>sum+n,0),peakIndex=days.indexOf(Math.max(...days));
+    const low=messages<20,date=i===0?summaryDay(day,Math.min(2,(Date.parse(today)-Date.parse(day))/864e5)):summaryDay(day,2);
+    const ai=low?null:{
+      themes:[
+        {title:'串流平台分潤',share:46,from:summaryDate(day),to:summaryDate(date),note:'比較訂閱拆帳與廣告分潤，並討論創作者能取得哪些資料。'},
+        {title:'小組訪談與逐字稿',share:34,from:summaryDate(day),to:summaryDate(date),note:'各組確認訪談分工、逐字稿格式和時間碼標法。'},
+        {title:'案例與資料來源',share:20,from:summaryDate(day),to:summaryDate(date),note:'整理台灣串流平台案例，討論不同來源的數字如何對照。'}
+      ],
+      questions:['訂閱平台會公開每一部作品的分潤方式嗎？','訪談逐字稿需要逐句標示時間嗎？'],
+      open:['還缺一個能對照會員收入與廣告收入的台灣案例。'],
+      quotes:[{who:'張家豪',text:'請問逐字稿需要標時間碼嗎？'},{who:'老師',text:'不用逐句標，每段開頭標一次就可以。'}],
+      next:i===0?'':'下週可帶著各組整理出的分潤案例，對照平台與創作者取得的資料。'
+    };
+    const latest=demoSummaryRefreshes.get(demo.course);
+    weeks.push({monday:day,w:'W'+(1+(Date.parse(day)-Date.parse(week1))/6048e5),
+      range:summaryDate(day)+'–'+summaryDate(summaryDay(day,6)),kind:i===0?'live':'final',low,
+      stats:{messages,people:low?3:i===0?14:17,days,peak:{day:summaryDay(day,peakIndex),hour:14,count:Math.ceil(days[peakIndex]/3)}},
+      ai,model:low?null:i===0?'gpt-6-luna':'gpt-6.2-sol',
+      made:latest?.weeks.get(day)||(i===0?new Date(Date.now()-3600e3).toISOString():summaryDay(day,7)+'T00:00:00.000Z'),error:null});
+  }
+  return {configured:true,week1,today,weeks};
+}
 async function demoApi(action,b={}){
   await new Promise(r=>setTimeout(r,500));
-  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend','meetCreate'].includes(action))
+  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend','meetCreate','summaries','summaryRefresh'].includes(action))
     throw Object.assign(new Error('這個功能只有老師能用。'),{code:'teacher_only'});
   const pub=({...r})=>r;
   switch(action){
@@ -113,6 +141,18 @@ async function demoApi(action,b={}){
     case 'meetCreate':{const r=n=>[...Array(n)].map(()=>'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random()*26)]).join('');
       demo.meet=`https://meet.google.com/${r(3)}-${r(4)}-${r(3)}`;return {meet:demo.meet};}
     case 'meetSend':if(!demo.meet)throw Object.assign(new Error('請先存一個 Google Meet 連結。'),{code:'invalid'});return {sent:true};
+    case 'summaries':return demoSummaries();
+    case 'summaryRefresh':{
+      const day=b.monday||monday(today);
+      const updated=demoSummaries().weeks.find(w=>w.monday===day);
+      if(!updated)throw Object.assign(new Error('請選擇這學期已開始的週次。'),{code:'bad_request'});
+      const latest=demoSummaryRefreshes.get(demo.course)||{retry:0,weeks:new Map()};
+      if(Date.now()<latest.retry)throw Object.assign(new Error('這堂課每 10 分鐘可手動更新一次。'),
+        {code:'rate_limited',retryAt:new Date(latest.retry).toISOString()});
+      updated.made=new Date().toISOString();latest.weeks.set(day,updated.made);
+      latest.retry=Date.now()+600000;demoSummaryRefreshes.set(demo.course,latest);
+      return updated;
+    }
     default:if(typeof demoRoll==='function'){const r=demoRoll(action,b);if(r!==undefined)return r;}
   }
   const q=(b.q||'').trim().toLowerCase(),size=5,start=b.offset||0,person=b.person!=null?DEMO_PEOPLE[b.person-3]:'';
@@ -241,6 +281,150 @@ function meetSendDialog(){
     try{await api('meetSend');close();toast('已發到群組');}
     catch(error){const el=$('meetSendErr');el.textContent=error.message;el.hidden=false;}}));
 }
+
+// The summary screens stay inside the teacher's 總覽 tab.
+const SUMMARY_DAYS='一二三四五六日';
+const SUMMARY_SETUP='尚未設定 OpenAI 金鑰：到 Apps Script 專案設定的指令碼屬性加入 OPENAI_API_KEY';
+const summaryDay=(day,offset)=>new Date(Date.parse(day)+offset*864e5).toISOString().slice(0,10);
+const summaryDate=day=>day.slice(5,10).replace('-','/');
+const summaryTime=iso=>new Date(Date.parse(iso)+8*3600e3).toISOString().slice(0,16).replace('T',' ');
+const summaryLive=w=>w.monday===monday(S.summaryData.today);
+const summaryProgress=()=>'<span class="tag ok summary-progress">進行中</span>';
+const summaryBadge=()=>'<span class="tag summary-badge">AI 摘要</span>';
+
+function summaryStats(w){
+  const {messages,people,days,peak}=w.stats,max=Math.max(1,...days);
+  const label=days.map((n,i)=>`週${SUMMARY_DAYS[i]} ${n===null?'尚未到':n+' 則'}`).join('，');
+  return `<div class="tiles summary-stats">
+    <div class="tile"><div class="k">訊息</div><div class="v">${messages} <small>則</small></div></div>
+    <div class="tile"><div class="k">發言人數</div><div class="v">${people} <small>人</small></div></div>
+    </div>
+    <div class="summary-heat" role="img" aria-label="${esc(w.w+' 每日訊息數：'+label)}">
+      ${days.map((n,i)=>`<div class="${n===null?'future':n/max>=.7?'high':n/max>=.25?'mid':n?'low':''}">
+        <span>${SUMMARY_DAYS[i]}</span><strong class="num">${n??'—'}</strong></div>`).join('')}
+    </div>
+    ${peak.count?`<p class="hint">尖峰 週${SUMMARY_DAYS[daysUntil(w.monday,peak.day)]} ${String(peak.hour).padStart(2,'0')}:00（${peak.count} 則）</p>`:''}
+    <p class="hint">數字由程式從歷程計算，不經過 AI</p>`;
+}
+const daysUntil=(from,to)=>(Date.parse(to)-Date.parse(from))/864e5;
+
+function summaryAi(ai,full){
+  const list=(label,items)=>`<div class="summary-section"><h3>${label}</h3>
+    ${items.length?`<ul>${items.map(text=>`<li>${esc(text)}</li>`).join('')}</ul>`:'<p class="hint">—</p>'}</div>`;
+  return `<div class="summary-ai">
+    <div class="summary-heading"><h3>主題與約略占比</h3>${summaryBadge()}</div>
+    <ul class="summary-topics">${ai.themes.map(t=>`<li>
+      <div class="summary-topic"><strong>${esc(t.title)}</strong><span class="num">約 ${t.share}%</span>
+        <span class="hint num">${esc(t.from===t.to?t.from:t.from+'–'+t.to)}</span></div>
+      <div class="summary-ratio" role="img" aria-label="${esc(t.title+' 約占 '+t.share+'%')}"><i style="width:${t.share}%"></i></div>
+      ${full?`<p class="hint">${esc(t.note)}</p>`:''}</li>`).join('')}</ul>
+    ${full?list('關鍵問題',ai.questions)+list('還沒解決',ai.open)+`
+      <div class="summary-section"><h3>留下來的發言</h3>
+        ${ai.quotes.length?ai.quotes.map(q=>`<blockquote><p>「${esc(q.text)}」</p><footer>${esc(q.who||'（未設定暱稱）')}</footer></blockquote>`).join(''):'<p class="hint">—</p>'}
+      </div>
+      <div class="summary-section"><h3>下週可以接續</h3><p>${esc(ai.next||'—')}</p></div>`:''}
+    </div>`;
+}
+
+function summaryCard(w,full=false){
+  const {configured,today}=S.summaryData,current=summaryLive(w),ai=configured?w.ai:null;
+  const refresh=configured&&(!w.low||full);
+  return `<section class="card summary-card">
+    <div class="summary-heading"><div><h2>${current?`本週至今 <span class="wk">${esc(w.w)}</span>`:esc(w.w)+' 摘要'}</h2>
+      <div class="meta num">${esc(w.range)}${current?'（截至 '+summaryDate(today)+'）':''}</div></div>
+      ${current?summaryProgress():''}</div>
+    ${summaryStats(w)}
+    ${ai?summaryAi(ai,full):''}
+    ${!configured?`<p class="hint summary-message">${SUMMARY_SETUP}</p>`:''}
+    ${w.low?'<p class="hint summary-message">訊息少於 20 則，不產生摘要</p>':''}
+    ${configured&&w.error?`<p class="err summary-message" role="alert">${esc(w.error)}${ai?' 下方時間為上次成功產生的時間。':''}</p>`:''}
+    ${configured&&!w.low&&!ai&&!w.error?'<p class="hint summary-message">摘要尚未產生。</p>':''}
+    ${ai&&w.made?`<p class="hint summary-message">${esc(w.model)}・${current?'最後更新':'產生時間'} <time class="num" datetime="${esc(w.made)}">${summaryTime(w.made)}</time></p>`:''}
+    ${refresh||!full?`<div class="summary-actions">
+      ${refresh?`<button type="button" class="btn primary" data-summary-refresh="${esc(w.monday)}">${current?'更新本週摘要':'重新產生'}</button>`:''}
+      ${!full?`<button type="button" class="btn" data-summary-view="${esc(w.monday)}">看完整摘要</button>
+        <button type="button" class="btn" data-summary-view="weeks">各週摘要 ›</button>`:''}
+    </div>`:''}
+    </section>`;
+}
+
+function summaryHome(){
+  const w=S.summaryData.weeks[0];
+  $('weeklySummary').innerHTML=w?summaryCard(w):`<section class="card summary-card"><h2>本週至今</h2>
+    ${!S.summaryData.configured?`<p class="hint">${SUMMARY_SETUP}</p>`:''}
+    <p class="hint">這堂課尚未開始，還沒有可查看的週次。</p></section>`;
+}
+
+async function loadSummary(mine){
+  const box=$('weeklySummary');skeleton(box,[76]);
+  try{
+    const data=await api('summaries');
+    if(mine!==seq)return;
+    S.summaryData=data;box.removeAttribute('aria-busy');summaryHome();
+  }catch(error){
+    if(mine!==seq)return;
+    if(error.code==='bad_request'){box.remove();return;}
+    box.removeAttribute('aria-busy');box.innerHTML=problem(error,'summary');
+  }
+}
+
+function summaryScreen(){
+  const {weeks,configured}=S.summaryData,view=S.summaryView;
+  const returnButton=(target,label)=>`<button type="button" class="btn summary-return" data-summary-view="${target}">‹ ${label}</button>`;
+  if(view==='weeks'){
+    main.innerHTML=returnButton('home','返回總覽')+`<h2 class="summary-list-title">各週摘要</h2>
+      <div class="summary-weeks">${weeks.map(w=>{
+        const title=configured&&w.ai?.themes[0]?.title;
+        return `<button type="button" class="tile summary-week" data-summary-view="${esc(w.monday)}">
+          <span class="summary-heading"><strong>${esc(w.w)}</strong>${summaryLive(w)?summaryProgress():''}</span>
+          <span class="hint num">${esc(w.range)}・${w.stats.messages} 則</span>
+          <span class="hint">${title?esc(title):w.low?'訊息少，無摘要':configured?'摘要尚未產生':'尚未設定 OpenAI 金鑰'}</span>
+          ${title?summaryBadge():''}</button>`;
+      }).join('')}</div>`;
+    return;
+  }
+  const index=weeks.findIndex(w=>w.monday===view),w=weeks[index];
+  const older=weeks[index+1],newer=index>0?weeks[index-1]:null;
+  main.innerHTML=returnButton(S.summaryBack,S.summaryBack==='weeks'?'返回各週摘要':'返回總覽')+summaryCard(w,true)+
+    `<div class="summary-nav" role="group" aria-label="切換週次">
+      ${older?`<button type="button" class="btn" data-summary-neighbor="${esc(older.monday)}">‹ 上一週 ${esc(older.w)}</button>`:''}
+      ${newer?`<button type="button" class="btn" data-summary-neighbor="${esc(newer.monday)}">下一週 ${esc(newer.w)} ›</button>`:''}
+    </div>`;
+}
+
+async function refreshSummary(day,btn){
+  const mine=seq,label=btn.innerHTML;
+  btn.disabled=true;btn.setAttribute('aria-busy','true');
+  btn.innerHTML='<span class="summary-spinner" aria-hidden="true"></span>產生中…';
+  try{
+    const w=await api('summaryRefresh',{monday:day});
+    if(mine!==seq)return;
+    const weeks=S.summaryData.weeks;
+    weeks[weeks.findIndex(item=>item.monday===w.monday)]=w;
+    S.summaryView?summaryScreen():summaryHome();
+    main.querySelector('[data-summary-refresh]')?.focus({preventScroll:true});
+    if(w.error)toast(w.error,'alert');
+    else toast(w.low?'已更新統計':summaryLive(w)?'本週摘要已更新':'固定版已重新產生');
+  }catch(error){
+    if(mine!==seq)return;
+    const message=error.code==='rate_limited'&&error.retryAt?error.message+' 請於 '+summaryTime(error.retryAt)+' 後再按。'
+      :error.code==='not_configured'?SUMMARY_SETUP:error.message;
+    toast(message,'alert');
+  }finally{
+    btn.disabled=false;btn.removeAttribute('aria-busy');btn.innerHTML=label;
+  }
+}
+
+function summaryRefreshClick(day,btn){
+  const w=S.summaryData.weeks.find(item=>item.monday===day);
+  if(summaryLive(w)){refreshSummary(day,btn);return;}
+  const close=sheet(`<h3 id="sheetTitle">重新產生固定版？</h3>
+    <p class="hint">新摘要產生後會取代 ${esc(w.w)} 的固定版。</p>
+    <div class="row"><button type="button" class="btn" data-close>取消</button>
+    <button type="button" class="btn primary" id="summaryConfirm">重新產生</button></div>`);
+  $('summaryConfirm').addEventListener('click',()=>{close();refreshSummary(day,btn);});
+}
+
 const VIEW={
   log(){
     const t=asTeacher();
@@ -273,11 +457,12 @@ const VIEW={
       .then(()=>{const box=$('poke');if(S.tab==='me'&&box&&document.activeElement===box)box.closest('form').scrollIntoView({block:'center'});});
   },
   async home(){
+    if(S.summaryView){summaryScreen();return;}
     const mine=++seq;skeleton(main,[76,76,150,56,56]);
     try{
       const o=await api('overview');if(mine!==seq)return;main.removeAttribute('aria-busy');
       const max=Math.max(1,...o.week.map(w=>w.count));S.meet=o.meet||'';S.meetEdit=false;
-      main.innerHTML=`${meetCard()}<h2>今天</h2><div class="tiles">
+      main.innerHTML=`${meetCard()}<div id="weeklySummary"></div><h2>今天</h2><div class="tiles">
           <div class="tile"><div class="k">訊息</div><div class="v">${o.today.messages} <small>則</small></div></div>
           <div class="tile"><div class="k">發言人數</div><div class="v">${o.today.people} <small>人</small></div></div>
           <div class="tile"><div class="k">上傳檔案</div><div class="v">${o.today.uploads} <small>個</small></div></div>
@@ -291,6 +476,7 @@ const VIEW={
           <div class="grow"><div><b>${esc(s.who)}</b></div><div class="meta"><span class="num">訊息 ${s.messages}</span><span class="num">檔案 ${s.files}</span><span class="num">最後 ${when(s.last)}</span></div></div>
           <span style="color:var(--ink-2);font-size:13px">看紀錄 ›</span></button></li>`).join('')}</ul>
           <p class="hint">只列出這學期（W1 之後）在群組發言過的人。</p>`:empty('還沒有學生在這個群組發言。')}`;
+      loadSummary(mine);
     }catch(error){if(mine!==seq)return;main.removeAttribute('aria-busy');main.innerHTML=problem(error,'view');}
   },
   hand(){
@@ -336,7 +522,7 @@ const VIEW={
     }catch(error){box.removeAttribute('aria-busy');box.innerHTML=problem(error,'view');}
   }
 };
-function render(){if(typeof rollLeave==='function')rollLeave();tabs();window.scrollTo(0,0);const old=document.querySelector('.actionbar');if(old)old.remove();VIEW[S.tab]();}
+function render(){seq++;main.removeAttribute('aria-busy');if(typeof rollLeave==='function')rollLeave();tabs();window.scrollTo(0,0);const old=document.querySelector('.actionbar');if(old)old.remove();VIEW[S.tab]();}
 
 async function stats(){
   const box=$('stats');box.innerHTML='<div class="sk" style="height:76px"></div>';
@@ -406,7 +592,7 @@ async function castDialog(){
 }
 
 // ---------- events ----------
-$('tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.tab=b.dataset.tab;S.select=false;S.picked.clear();render();main.focus({preventScroll:true});});
+$('tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.tab=b.dataset.tab;S.summaryView='';S.select=false;S.picked.clear();render();main.focus({preventScroll:true});});
 let deb;
 main.addEventListener('input',e=>{if(e.target.id!=='q')return;S.q=e.target.value;clearTimeout(deb);deb=setTimeout(()=>fillList($('list'),logParams(),LOG_EMPTY),500);});
 main.addEventListener('change',async e=>{
@@ -426,6 +612,12 @@ main.addEventListener('change',async e=>{
 });
 main.addEventListener('click',async e=>{
   const t=e.target.closest('button');if(!t)return;const d=t.dataset;
+  if('summaryView' in d||'summaryNeighbor' in d){
+    const to=d.summaryView||d.summaryNeighbor;
+    if(d.summaryView&&to!=='home'&&to!=='weeks')S.summaryBack=S.summaryView==='weeks'?'weeks':'home';
+    S.summaryView=to==='home'?'':to;render();main.focus({preventScroll:true});return;
+  }
+  if('summaryRefresh' in d){summaryRefreshClick(d.summaryRefresh,t);return;}
   if('meetsend' in d){meetSendDialog();return;}
   if('meetnew' in d){meetCreate(t);return;}
   if('meetedit' in d){S.meetEdit=true;meetRepaint();$('meetUrl').focus();return;}
@@ -440,7 +632,7 @@ main.addEventListener('click',async e=>{
   else if('cast' in d){castDialog();}
   else if('week1auto' in d){busy(t,async()=>{try{const r=await api('saveSettings',{week1:''});S.info.week1=r.week1;S.info.week1Auto=r.week1Auto;render();toast('已改回自動判斷：W1 從 '+r.week1+' 那一週開始');}catch(error){toast(error.message,'alert');}});}
   else if('preview' in d){S.preview=true;S.tab='me';header();render();main.focus({preventScroll:true});}
-  else if('retry' in d){d.retry==='boot'?boot():render();}
+  else if('retry' in d){if(d.retry==='summary')loadSummary(seq);else d.retry==='boot'?boot():render();}
   else if('more' in d){
     const box=$('list'),params={...JSON.parse(box.dataset.params),offset:+d.more},label=t.innerHTML;
     t.disabled=true;t.textContent='載入中…';
