@@ -86,7 +86,7 @@ const demo={teacher:QUERY.get('demo')==='teacher',nick:QUERY.get('demo')==='teac
 const DEMO_COURSES=[['a','媒體產業研究',0,'10:42'],['b','數位敘事工作坊',-1,'16:05'],['c','傳播理論',-4,'09:30']];
 async function demoApi(action,b={}){
   await new Promise(r=>setTimeout(r,500));
-  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend'].includes(action))
+  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend','meetCreate'].includes(action))
     throw Object.assign(new Error('這個功能只有老師能用。'),{code:'teacher_only'});
   const pub=({...r})=>r;
   switch(action){
@@ -110,6 +110,8 @@ async function demoApi(action,b={}){
       if(String(b.url||'').trim()===''){demo.meet='';return {meet:''};}
       if(!m)throw Object.assign(new Error('請貼上 Google Meet 的會議連結，例如 https://meet.google.com/abc-defg-hij'),{code:'invalid'});
       demo.meet='https://meet.google.com/'+m[1].toLowerCase();return {meet:demo.meet};}
+    case 'meetCreate':{const r=n=>[...Array(n)].map(()=>'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random()*26)]).join('');
+      demo.meet=`https://meet.google.com/${r(3)}-${r(4)}-${r(3)}`;return {meet:demo.meet};}
     case 'meetSend':if(!demo.meet)throw Object.assign(new Error('請先存一個 Google Meet 連結。'),{code:'invalid'});return {sent:true};
     default:if(typeof demoRoll==='function'){const r=demoRoll(action,b);if(r!==undefined)return r;}
   }
@@ -207,15 +209,28 @@ function meetCard(){
         <p class="hint" id="meetHelp">貼上一次就會記住。之後每次上課，按「發到群組」就好。</p>
         <p class="err" id="meetErr" role="alert" hidden></p>
         <button class="btn primary block" style="margin-top:12px" type="submit">儲存連結</button>
+        <button type="button" class="btn block" style="margin-top:8px" data-meetnew>${ic('plus')}或者，產生新的會議連結</button>
         ${S.meet?`<div class="rowline" style="margin-top:8px"><button type="button" class="btn grow" data-meetcancel>取消</button>
           <button type="button" class="btn" data-meetremove style="color:var(--danger)">移除連結</button></div>`:''}
       </form>`
     :`<div class="card"><div class="f" style="margin-top:0">Google Meet 會議連結</div>
         <p class="num" style="margin:4px 0 12px;word-break:break-all">${esc(S.meet)}</p>
         <button type="button" class="btn primary block" data-meetsend>${ic('send')}發到群組</button>
-        <button type="button" class="btn block" style="margin-top:8px" data-meetedit>${ic('edit')}更改連結</button></div>`}</section>`;
+        <div class="rowline" style="margin-top:8px"><button type="button" class="btn grow" data-meetnew>${ic('plus')}產生新的連結</button>
+          <button type="button" class="btn grow" data-meetedit>${ic('edit')}貼上別的</button></div>
+        <p class="hint">「產生新的連結」會用你的 Gmail 開一個新的 Google Meet，並加進 Gmail 的日曆。</p></div>`}</section>`;
 }
 function meetRepaint(){const el=$('meetCard');if(el)el.outerHTML=meetCard();}
+// A new Meet from the teacher's Gmail (meet-helper/). Replacing a saved link asks first.
+async function meetCreate(btn){
+  const go=async b=>{try{const r=await api('meetCreate');S.meet=r.meet;S.meetEdit=false;meetRepaint();toast('已產生新的會議連結');return true;}
+    catch(error){toast(error.message,'alert');return false;}};
+  if(!S.meet)return busy(btn,()=>go(btn));
+  const close=sheet(`<h3 id="sheetTitle">產生新的會議連結？</h3>
+    <p class="hint">目前存的連結會換成新的。舊的會議還留在你的 Gmail 日曆裡，不受影響。</p>
+    <div class="row"><button type="button" class="btn" data-close>取消</button><button type="button" class="btn primary" id="meetNewGo">${ic('plus')}產生</button></div>`);
+  $('meetNewGo').addEventListener('click',e=>busy(e.currentTarget,async()=>{if(await go())close();}));
+}
 function meetSendDialog(){
   const close=sheet(`<h3 id="sheetTitle">把會議連結發到群組？</h3>
     <div class="card" style="white-space:pre-wrap;word-break:break-all;font-size:14px;margin:8px 0">${esc(meetText(S.meet))}</div>
@@ -409,6 +424,7 @@ main.addEventListener('change',async e=>{
 main.addEventListener('click',async e=>{
   const t=e.target.closest('button');if(!t)return;const d=t.dataset;
   if('meetsend' in d){meetSendDialog();return;}
+  if('meetnew' in d){meetCreate(t);return;}
   if('meetedit' in d){S.meetEdit=true;meetRepaint();$('meetUrl').focus();return;}
   if('meetcancel' in d){S.meetEdit=false;meetRepaint();return;}
   if('meetremove' in d){busy(t,async()=>{try{await api('meetSave',{url:''});S.meet='';S.meetEdit=false;meetRepaint();toast('已移除會議連結');}catch(error){toast(error.message,'alert');}});return;}
