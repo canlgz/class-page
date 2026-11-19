@@ -348,7 +348,9 @@ main.addEventListener('submit',e=>{
   const form=e.target,btn=form.querySelector('[type=submit]');
   if(form.id==='rollStart'){
     e.preventDefault();
-    busy(btn,async()=>{try{rollTake(await api('rollStart',{layout:$('rollLayout').value,minutes:+$('rollMinutes').value}));toast($('rollLayout').value==='online'?'開始線上點名，請學生打開課堂頁面的「點名」按「我到了」':'開始點名，請學生打開課堂頁面的「點名」');window.scrollTo(0,0);}
+    // Read the form first: the page is redrawn without it once the roll call starts.
+    const layout=$('rollLayout').value,minutes=+$('rollMinutes').value;
+    busy(btn,async()=>{try{rollTake(await api('rollStart',{layout,minutes}));toast(layout==='online'?'開始線上點名，請學生打開課堂頁面的「點名」按「我到了」':'開始點名，請學生打開課堂頁面的「點名」');window.scrollTo(0,0);}
       catch(error){toast(error.message,'alert');}});
   }else if(form.id==='layoutForm'){
     e.preventDefault();
