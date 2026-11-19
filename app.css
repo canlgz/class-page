@@ -222,4 +222,8 @@ textarea.t{min-height:96px;resize:vertical}
 .summary-formative ul{padding-left:1.3em}
 .summary-stuck{margin:var(--s2) 0 0;font-size:14px}
 .summary-stuck b{color:var(--ink-2);font-size:13px}
+.summary-notices{border:1px solid var(--line);border-radius:10px;padding:var(--s2) var(--s3);margin-bottom:var(--s3)}
+.summary-notices ul{list-style:none;margin:var(--s2) 0 0;padding:0;font-size:14px}
+.summary-notices li+li{margin-top:var(--s1)}
+.summary-notices .summary-role{margin-right:var(--s1)}
 

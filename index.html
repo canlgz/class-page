@@ -100,6 +100,7 @@ function demoSummaries(){
     const refreshed=demoSummaryRefreshes.get(demo.course)?.weeks.get(day);
     const summary=low?{headline:'零星確認了訪談改成線上的安排。',threads:[],pending:[],
         formative:{understanding:[{when:'零散訊息',text:'零星確認了訪談改成線上的安排。'}],stuck:[],next:['下週確認各組的訪談時間。']}}:{
+      notices:i===0?{tasks:[{what:'完成期中報告大綱並上傳到 eeclass',due:'11/25 晚上 11 點前'}],schedule:['下週三改成實體上課，地點在 R205'],notes:['訪談錄音請先徵得受訪者同意'],current:true}:null,
       formative:{understanding:[{when:d1+' 14:10',text:'多數人能說出計量式與硬式付費牆的差別，並用自己的訂閱經驗舉例。'},
           {when:d1+' 20:05',text:'各組已經分好訪談與簡報的工作。'}],
         stuck:['「讀者付錢買的是內容還是免於廣告」還分不清，討論時兩者常混在一起。','期中報告的格式要求還不清楚。'],
@@ -372,10 +373,22 @@ function summaryFormative(w){
     ${f.next.length?`<h4>下一步</h4>${list(f.next)}`:''}</div>`;
 }
 
+// 老師交代的事: what the AI took from the teacher's own messages, for the teacher to check.
+function summaryNotices(w,compact){
+  const n=w.summary?.notices;
+  if(!n)return '';
+  const items=[...n.tasks.map(t=>['作業',t.what+(t.due?`（${t.due}）`:'')]),...n.schedule.map(x=>['上課安排',x]),...n.notes.map(x=>['注意',x])];
+  if(compact)return items.length?`<p class="summary-stuck"><b>老師交代的事</b>　${items.length} 項・${esc(items[0][1])}${items.length>1?' 等':''}</p>`:'';
+  return `<div class="summary-notices">
+    <div class="summary-heading"><h3>老師交代的事</h3>${summaryBadge()}</div>
+    ${items.length?`<ul>${items.map(([k,v])=>`<li><span class="tag summary-role plain">${k}</span> ${esc(v)}</li>`).join('')}</ul>`:'<p class="hint">這週的訊息裡沒有交代作業或安排。</p>'}
+    <p class="hint">AI 從你這週的訊息整理${n.current?'':'（之後又有新訊息，下次排程會更新）'}，會寫進給同學的本週提醒。漏了或寫錯的地方，可以在群組補充後按更新。</p></div>`;
+}
+
 function summaryTalk(w){
   const s=w.summary;
   if(!s)return w.low?summaryLow(w):'';
-  return summaryFormative(w)+summaryPending(s.pending,5)+s.threads.map((t,i)=>{
+  return summaryNotices(w,false)+summaryFormative(w)+summaryPending(s.pending,5)+s.threads.map((t,i)=>{
     const who=[...new Set([t.starter,...t.positions.flatMap(p=>p.who)].filter(Boolean))];
     return `<details class="summary-thread"${i===0?' open':''}>
       <summary><span class="grow"><strong>${esc(t.title)}</strong>
@@ -434,6 +447,7 @@ function summaryRefreshButton(w,primary){
 // 總覽's card: the week in one sentence, what waits for an answer, and whether the summary is behind.
 function summaryCard(w){
   return `<section class="card summary-card">${summaryHeader(w)}
+    ${summaryNotices(w,true)}
     ${w.summary?.formative?.stuck?.length?`<p class="summary-stuck"><b>還卡在哪</b>　${esc(w.summary.formative.stuck[0])}</p>`:''}
     ${w.summary?summaryPending(w.summary.pending,2):''}
     ${w.low?summaryLow(w):''}${summaryState(w)}
