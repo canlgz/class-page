@@ -512,10 +512,12 @@ async function boot(tab){
     // ?tab=me from the menu's nickname line; only a tab this person has.
     // The teacher has no 我的 tab: their nickname is in 設定, so ?tab=me opens it there.
     const asked=QUERY.get('tab'),own=TABS[S.info.teacher?'teacher':'student'].map(t=>t[0]);
-    const toNick=!tab&&asked==='me'&&S.info.teacher;
-    S.tab=tab||(toNick?'set':own.includes(asked)?asked:S.info.teacher?'home':'log');
+    // ?tab=poke from the menu's 私下戳戳老師: a student lands on 我的 with the poke box ready.
+    const toNick=!tab&&asked==='me'&&S.info.teacher,toPoke=!tab&&asked==='poke'&&!S.info.teacher;
+    S.tab=tab||(toNick?'set':toPoke?'me':own.includes(asked)?asked:S.info.teacher?'home':'log');
     header();main.removeAttribute('aria-busy');$('tabs').hidden=false;render();
     if(toNick){const f=$('nickForm');f.scrollIntoView({block:'center'});$('nick').focus({preventScroll:true});}
+    if(toPoke){const f=$('pokeForm');f.scrollIntoView({block:'center'});$('poke').focus({preventScroll:true});}
   }catch(error){
     main.removeAttribute('aria-busy');$('tabs').hidden=true;
     if(!error.code)error=Object.assign(new Error('無法開啟頁面：'+error.message),{code:'network'});
