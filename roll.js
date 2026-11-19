@@ -4,12 +4,17 @@
 // 配置圖每一格是：1 座位、0 走道、P 講台、T 老師、L 文字（labels 存文字）。
 // 講台可以放在任何地方；座位的「第幾排第幾個」從講台那一側算起，面向講台由左往右數。
 // 沒有 P 格的舊配置圖，講台畫在最上方。
+// 線上上課（layout.online）：沒有配置圖，學生按「我到了」，依到的順序拿到虛擬座位「線上1」「線上2」…；
+// 老師看到的是依序排列的名字格，抽籤、補簽到、取消都照常。
 
 const R={state:null,timer:null,poll:null,flip:false,edit:null,tool:'1',spinning:false};
 function rollLeave(){clearInterval(R.timer);clearInterval(R.poll);R.timer=R.poll=null;}
 const TEACHER_SVG='<svg viewBox="0 0 24 24" width="60%" height="60%" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="3.5"/><path d="M5 21v-1.5A5.5 5.5 0 0 1 10.5 14h3a5.5 5.5 0 0 1 5.5 5.5V21"/><path d="M12 14v3"/></svg>';
 // Seat 'r-c' as people say it: rows counted from the podium side, seats from the left as you face it.
+const ONLINE='線上';
+const isOnline=st=>!!(st&&st.layout&&st.layout.online);
 function seatName(seat,layout){
+  if(seat.startsWith(ONLINE))return `線上第 ${seat.slice(ONLINE.length)} 位`;
   layout=layout||(R.state&&R.state.layout);const [r,c]=seat.split('-').map(Number);
   if(!layout)return `第 ${r} 排第 ${c} 個`;
   const rows=layout.rows,seatRows=rows.map((row,i)=>row.includes('1')?i+1:0).filter(Boolean);
@@ -89,6 +94,7 @@ function rollPaint(){
 
 // ---------- student ----------
 function studentHtml(st){
+  if(isOnline(st))return onlineStudentHtml(st);
   if(!st.layout)return empty('老師還沒有開始點名。<br>開始之後，這裡會出現座位圖。','<button type="button" class="btn" data-rollrefresh>重新整理</button>');
   const head=st.open
     ?`<div class="card"><div class="rowline"><span class="tag ok">${ic('ok')}點名中</span><span>剩 <b class="num" id="rollLeft">${mmss(st.endsIn)}</b></span></div>
@@ -105,42 +111,57 @@ function studentHtml(st){
     <div class="legend"><span><i style="background:var(--brand);border-color:var(--brand)"></i>你</span><span><i style="background:var(--surface-2)"></i>已經有人</span><span><i></i>空位</span></div></div>`;
 }
 
+// Online: one button, no room.
+function onlineStudentHtml(st){
+  const n=st.mine?st.mine.slice(ONLINE.length):'';
+  if(st.open)return `<div class="card"><div class="rowline"><span class="tag ok">${ic('ok')}線上點名中</span><span>剩 <b class="num" id="rollLeft">${mmss(st.endsIn)}</b></span></div>
+    ${st.mine?`<p class="big" style="margin:8px 0 0">已簽到，你是第 ${n} 位</p><p class="hint">這樣就好了，不用再按。</p>`
+      :`<p class="big" style="margin:8px 0 0">線上上課，按一下簽到</p>
+        <button type="button" class="btn primary block" style="margin-top:12px;min-height:56px;font-size:18px" data-checkin>${ic('ok')}我到了</button>`}
+    <p class="hint">已經有 ${st.taken.length} 人簽到。</p></div>`;
+  return `<div class="card"><div class="rowline"><span class="tag no">已結束</span><span>${dayWeek(st.day)} ${esc(st.key)}・線上</span></div>
+    <p class="big" style="margin:8px 0 0">${st.mine?`你有簽到（第 ${n} 位）`:'這次沒有簽到'}</p>
+    ${st.mine?'':'<p class="hint">如果你有上課，請直接告訴老師，老師可以幫你補上。</p>'}</div>`;
+}
+
 // ---------- teacher ----------
 function teacherHtml(st){
   let html='';
+  const online=isOnline(st),did=online?'已簽到':'已點位置',didnt=online?'還沒簽到':'還沒點位置';
   if(st.layout){
     const pin=new Map(st.pins.map(p=>[p.seat,p])),drawn=new Set(st.drawn),last=st.last&&st.last.seat;
     html+=`<div class="card"><div class="rowline">${st.open
         ?`<span class="tag ok">${ic('ok')}點名中</span><span>剩 <b class="num" id="rollLeft">${mmss(st.endsIn)}</b></span><span class="grow"></span><button type="button" class="btn" data-rollstop>結束點名</button>`
         :`<span class="tag no">已結束</span><span>${dayWeek(st.day)} ${esc(st.key)}</span>`}</div>
-      <div class="tiles" style="margin-top:12px"><div class="tile"><div class="k">已點位置</div><div class="v">${st.pins.length} <small>人</small></div></div>
-        <div class="tile"><div class="k">還沒點</div><div class="v">${st.absent.length} <small>人</small></div></div></div></div>
+      <div class="tiles" style="margin-top:12px"><div class="tile"><div class="k">${did}</div><div class="v">${st.pins.length} <small>人</small></div></div>
+        <div class="tile"><div class="k">${online?'還沒簽到':'還沒點'}</div><div class="v">${st.absent.length} <small>人</small></div></div></div></div>
       <div class="card" aria-live="polite"><div class="hint" style="margin:0">抽籤</div>
         <div class="big" id="drawWho">${st.last?esc(st.last.who):'還沒抽'}</div>
-        <div class="hint" id="drawSeat">${st.last?seatName(st.last.seat):'只會抽到這次有點位置的人，抽過的不會再抽到。'}</div>
+        <div class="hint" id="drawSeat">${st.last?seatName(st.last.seat):`只會抽到這次${online?'有簽到':'有點位置'}的人，抽過的不會再抽到。`}</div>
         <div class="rowline" style="margin-top:12px"><button type="button" class="btn primary" data-rolldraw ${st.pins.length?'':'disabled'}>${ic('dice')}抽一位</button>
           ${st.drawn.length?`<button type="button" class="btn" data-rollreset>重新開始（已抽 ${st.drawn.length}）</button>`:''}</div></div>
-      <div class="card"><div class="chips" style="margin-top:0">${`<button type="button" class="chip" data-flip aria-pressed="${R.flip}">轉 180°</button>`}</div>
+      ${online?onlineGridHtml(st,drawn,last):`<div class="card"><div class="chips" style="margin-top:0">${`<button type="button" class="chip" data-flip aria-pressed="${R.flip}">轉 180°</button>`}</div>
         ${seatGrid(st.layout,seat=>{
           const p=pin.get(seat);
           return p?`<button type="button" class="seat taken${drawn.has(seat)?' drawn':''}${seat===last?' hit':''}" data-tseat="${seat}" aria-label="${seatName(seat)}，${esc(p.who)}${seat===last?'，剛抽中':''}">${esc(shortName(p.who))}</button>`
             :`<button type="button" class="seat" data-tseat="${seat}" aria-label="${seatName(seat)}，空位"></button>`;
         },R.flip)}
         <div class="legend"><span><i style="background:var(--surface-2)"></i>已點</span><span><i style="background:var(--ok-soft);border-color:var(--ok)"></i>抽過</span><span><i style="background:var(--warn);border-color:var(--warn)"></i>剛抽中</span></div>
-        <p class="hint">點任何一格可以幫學生補位置、換位置或取消。</p></div>
-      ${st.absent.length?`<h2>還沒點位置（${st.absent.length}）</h2><ul class="list">${st.absent.map(p=>`<li><div class="grow"><b>${esc(p.who)}</b></div></li>`).join('')}</ul>
+        <p class="hint">點任何一格可以幫學生補位置、換位置或取消。</p></div>`}
+      ${st.absent.length?`<h2>${didnt}（${st.absent.length}）</h2><ul class="list">${st.absent.map(p=>`<li style="align-items:center"><div class="grow"><b>${esc(p.who)}</b></div>${online?`<button type="button" class="btn" data-checkfor="${p.person}">補簽到</button>`:''}</li>`).join('')}</ul>
         <p class="hint">只列出這學期在群組發言過的人。</p>`:''}`;
   }
   if(!st.open){
-    html+=`<h2>${st.layout?'開始新的點名':'開始點名'}</h2>`+(st.layouts.length
-      ?`<form class="card" id="rollStart" novalidate>
+    html+=`<h2>${st.layout?'開始新的點名':'開始點名'}</h2>
+        <form class="card" id="rollStart" novalidate>
           <label class="f" for="rollLayout" style="margin-top:0">配置圖</label>
-          <select class="t" id="rollLayout">${st.layouts.map(l=>`<option value="${l.id}" ${l.id===st.defaultLayout?'selected':''}>${esc(l.name)}</option>`).join('')}</select>
+          <select class="t" id="rollLayout">${st.layouts.map(l=>`<option value="${l.id}" ${l.id===st.defaultLayout?'selected':''}>${esc(l.name)}</option>`).join('')}
+            <option value="online" ${st.defaultLayout==='online'||!st.layouts.length?'selected':''}>線上上課（不用座位，學生按「我到了」）</option></select>
           <label class="f" for="rollMinutes">開放多久</label>
           <select class="t" id="rollMinutes">${[3,5,10,15,20,30].map(m=>`<option value="${m}" ${m===10?'selected':''}>${m} 分鐘</option>`).join('')}</select>
           <p class="hint">時間到會自動結束。之後學生不能再改，你還是可以幫他們改。</p>
-          <button class="btn primary block" style="margin-top:12px" type="submit">${ic('pin')}開始點名</button></form>`
-      :'<p class="hint">還沒有配置圖。先在下面新增一張教室的座位圖。</p>');
+          <button class="btn primary block" style="margin-top:12px" type="submit">${ic('pin')}開始點名</button></form>`+
+        (st.layouts.length?'':'<p class="hint">實體教室要先在下面新增一張座位圖；線上上課不用。</p>');
   }
   html+=`<h2>配置圖</h2>${st.layouts.length?`<ul class="list">${st.layouts.map(l=>`<li><div class="grow"><b>${esc(l.name)}</b>
       <div class="meta"><span class="num">${l.rows.length} × ${l.rows[0].length} 格</span><span class="num">${l.rows.join('').split('1').length-1} 個座位</span></div></div>
@@ -148,6 +169,15 @@ function teacherHtml(st){
     <button type="button" class="btn block" style="margin-top:12px" data-layoutedit="">${ic('plus')}新增配置圖</button>
     <h2>點名紀錄</h2><div id="rollHist"><button type="button" class="btn block" data-rollhist>看每次點名與出席次數</button></div>`;
   return html;
+}
+
+// Online: the virtual seats are name tiles in the order people arrived.
+function onlineGridHtml(st,drawn,last){
+  const pins=st.pins.slice().sort((a,b)=>+a.seat.slice(ONLINE.length)-+b.seat.slice(ONLINE.length));
+  return `<div class="card"><div class="hint" style="margin:0 0 8px">依簽到順序</div>${pins.length?`<div class="vseats">${pins.map(p=>
+      `<button type="button" class="seat name taken${drawn.has(p.seat)?' drawn':''}${p.seat===last?' hit':''}" data-tseat="${p.seat}" aria-label="${seatName(p.seat)}，${esc(p.who)}${p.seat===last?'，剛抽中':''}"><small class="num">${p.seat.slice(ONLINE.length)}</small>${esc(p.who)}</button>`).join('')}</div>
+    <div class="legend"><span><i style="background:var(--ok-soft);border-color:var(--ok)"></i>抽過</span><span><i style="background:var(--warn);border-color:var(--warn)"></i>剛抽中</span></div>
+    <p class="hint">點名字可以取消簽到；沒簽到的人在下面補。</p>`:'<p class="hint" style="margin:0">還沒有人簽到。</p>'}</div>`;
 }
 
 // ---------- layout editor ----------
@@ -213,14 +243,14 @@ function textDialog(title,value,done){
 
 // ---------- teacher: one seat ----------
 function seatDialog(seat){
-  const st=R.state,p=st.pins.find(x=>x.seat===seat);
+  const st=R.state,p=st.pins.find(x=>x.seat===seat),online=isOnline(st);
   if(p){
     const close=sheet(`<h3 id="sheetTitle">${esc(p.who)}</h3><p class="hint">${seatName(seat)}・${esc(p.time)} 點的</p>
       <p class="err" id="seatErr" role="alert" hidden></p>
-      <div class="row">${p.person?'<button type="button" class="btn" id="seatClear" style="color:var(--danger)">取消他的位置</button>':''}<button type="button" class="btn" data-close>關閉</button></div>
-      ${p.person?'<p class="hint">要換位置：先關閉，再點他要去的空位，從名單選他。</p>':'<p class="hint">這是你自己在預覽學生畫面時點的。</p>'}`);
+      <div class="row">${p.person?`<button type="button" class="btn" id="seatClear" style="color:var(--danger)">${online?'取消他的簽到':'取消他的位置'}</button>`:''}<button type="button" class="btn" data-close>關閉</button></div>
+      ${!p.person?'<p class="hint">這是你自己在預覽學生畫面時點的。</p>':online?'':'<p class="hint">要換位置：先關閉，再點他要去的空位，從名單選他。</p>'}`);
     if(p.person)$('seatClear').addEventListener('click',e=>busy(e.currentTarget,async()=>{
-      try{const next=await api('rollAssign',{person:p.person,seat:''});close();rollTake(next);toast('已取消 '+p.who+' 的位置');}
+      try{const next=await api('rollAssign',{person:p.person,seat:''});close();rollTake(next);toast(online?'已取消 '+p.who+' 的簽到':'已取消 '+p.who+' 的位置');}
       catch(error){const el=$('seatErr');el.textContent=error.message;el.hidden=false;}}));
     return;
   }
@@ -264,6 +294,14 @@ main.addEventListener('click',async e=>{
     t.disabled=true;t.textContent='…';
     try{rollTake(await api('pin',{seat:d.seat}));toast('已記下你的位置：'+seatName(d.seat));}
     catch(error){toast(error.message,'alert');rollRefresh();}
+  }
+  else if('checkin' in d){
+    busy(t,async()=>{try{const next=await api('pin');rollTake(next);toast('已簽到，你是第 '+next.mine.slice(ONLINE.length)+' 位');}
+      catch(error){toast(error.message,'alert');rollRefresh();}});
+  }
+  else if('checkfor' in d){
+    const who=(R.state.absent.find(a=>String(a.person)===d.checkfor)||{}).who||'';
+    busy(t,async()=>{try{rollTake(await api('rollAssign',{person:+d.checkfor,seat:'online'}));toast('已幫 '+who+' 簽到');}catch(error){toast(error.message,'alert');}});
   }
   else if('rollrefresh' in d){VIEW.roll();}
   else if('tseat' in d){seatDialog(d.tseat);}
@@ -310,7 +348,7 @@ main.addEventListener('submit',e=>{
   const form=e.target,btn=form.querySelector('[type=submit]');
   if(form.id==='rollStart'){
     e.preventDefault();
-    busy(btn,async()=>{try{rollTake(await api('rollStart',{layout:$('rollLayout').value,minutes:+$('rollMinutes').value}));toast('開始點名，請學生打開課堂頁面的「點名」');window.scrollTo(0,0);}
+    busy(btn,async()=>{try{rollTake(await api('rollStart',{layout:$('rollLayout').value,minutes:+$('rollMinutes').value}));toast($('rollLayout').value==='online'?'開始線上點名，請學生打開課堂頁面的「點名」按「我到了」':'開始點名，請學生打開課堂頁面的「點名」');window.scrollTo(0,0);}
       catch(error){toast(error.message,'alert');}});
   }else if(form.id==='layoutForm'){
     e.preventDefault();
@@ -345,18 +383,22 @@ function demoRoll(action,b){
       last:cur&&cur.last&&DR.pins.find(p=>p.who===cur.last)?{seat:DR.pins.find(p=>p.who===cur.last).seat,who:cur.last}:null,
       layouts:Object.entries(DR.layouts).map(([id,l])=>({id,name:l.name,rows:l.rows,labels:l.labels||{}})),defaultLayout:DR.def});
   };
+  const next=()=>ONLINE+(Math.max(0,...DR.pins.map(p=>+p.seat.slice(ONLINE.length)||0))+1);
   const put=(who,seat,time)=>{if(DR.pins.some(p=>p.seat===seat&&p.who!==who))fail('taken','這個位置剛剛被別人點走了，請選另一個。');
     const mine=DR.pins.find(p=>p.who===who);if(mine)Object.assign(mine,{seat,time});else DR.pins.push({who,seat,time});};
   if(['rollStart','rollStop','rollDraw','rollReset','rollAssign','rollHistory','layoutSave','layoutDelete'].includes(action)&&!teacher)fail('teacher_only','這個功能只有老師能用。');
   switch(action){
     case 'rollcall':return state();
-    case 'pin':if(!open)fail('closed','現在不是點名時間。');put(me,b.seat,'10:05');return state();
-    case 'rollStart':DR.def=b.layout;DR.pins=[];DR.session={day:today,key:'10:'+(20+DR.n++),end:Date.now()+b.minutes*60e3,closed:false,layout:DR.layouts[b.layout],drawn:[],last:null};return state();
+    case 'pin':if(!open)fail('closed','現在不是點名時間。');
+      if(s.layout.online){if(!DR.pins.some(p=>p.who===me))put(me,next(),'10:05');}else put(me,b.seat,'10:05');return state();
+    case 'rollStart':DR.def=b.layout;DR.pins=[];DR.session={day:today,key:'10:'+(20+DR.n++),end:Date.now()+b.minutes*60e3,closed:false,
+      layout:b.layout==='online'?{name:'線上',online:true}:DR.layouts[b.layout],drawn:[],last:null};return state();
     case 'rollStop':s.closed=true;return state();
     case 'rollDraw':{const left=DR.pins.filter(p=>!s.drawn.includes(p.who));if(!left.length)fail('all_drawn','每個人都抽過了。按「重新開始」可以再抽一輪。');
       const pick=left[Math.floor(Math.random()*left.length)];s.drawn.push(pick.who);s.last=pick.who;return {seat:pick.seat,who:pick.who,left:left.length-1,state:state()};}
     case 'rollReset':s.drawn=[];s.last=null;return state();
-    case 'rollAssign':{const who=DEMO_PEOPLE[b.person-3];if(b.seat==='')DR.pins=DR.pins.filter(p=>p.who!==who);else put(who,b.seat,'10:09 老師');return state();}
+    case 'rollAssign':{const who=DEMO_PEOPLE[b.person-3];if(b.seat==='')DR.pins=DR.pins.filter(p=>p.who!==who);
+      else if(s.layout.online){if(!DR.pins.some(p=>p.who===who))put(who,next(),'10:09 老師');}else put(who,b.seat,'10:09 老師');return state();}
     case 'rollHistory':return {total:3,sessions:[{day:today,key:'10:00',week:week(today),layout:'台達館 105',count:DR.pins.length},{day:taipei(-7),key:'10:02',week:week(taipei(-7)),layout:'台達館 105',count:5},{day:taipei(-14),key:'10:01',week:week(taipei(-14)),layout:'台達館 105',count:6}],
       people:DEMO_PEOPLE.map((who,i)=>({person:i+3,who,count:[3,3,2,3,1,2][i]})).sort((x,y)=>x.count-y.count)};
     case 'layoutSave':{const id=b.id&&DR.layouts[b.id]?b.id:'n'+(DR.n++);DR.layouts[id]={name:b.name,rows:b.rows,labels:b.labels||{}};return {id,state:state()};}
