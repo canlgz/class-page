@@ -959,12 +959,14 @@ async function boot(tab){
     S.info=await api('init');
     // ?tab=me from the menu's nickname line; only a tab this person has.
     // The teacher has no 我的 tab: their nickname is in 設定, so ?tab=me opens it there.
-    const asked=QUERY.get('tab'),own=TABS[S.info.teacher?'teacher':'student'].map(t=>t[0]);
+    // ?as=student from the teacher's //學生選單 preview: the teacher opens the page as a student would.
     // ?tab=poke from the menu's 私下戳戳老師: a student lands on 我的 with the poke box ready. The
     // teacher has no poke of their own, so they land in the student preview there, to see what students see.
-    const toNick=!tab&&asked==='me'&&S.info.teacher,toPoke=!tab&&asked==='poke';
-    if(toPoke&&S.info.teacher)S.preview=true;
-    S.tab=tab||(toNick?'set':toPoke?'me':own.includes(asked)?asked:S.info.teacher?'home':'log');
+    const asked=QUERY.get('tab'),toPoke=!tab&&asked==='poke';
+    if(S.info.teacher&&(QUERY.get('as')==='student'||toPoke))S.preview=true;
+    const teacherView=S.info.teacher&&!S.preview,own=TABS[teacherView?'teacher':'student'].map(t=>t[0]);
+    const toNick=!tab&&asked==='me'&&teacherView;
+    S.tab=tab||(toNick?'set':toPoke?'me':own.includes(asked)?asked:teacherView?'home':'log');
     header();main.removeAttribute('aria-busy');$('tabs').hidden=false;render();
     if(toNick){const f=$('nickForm');f.scrollIntoView({block:'center'});$('nick').focus({preventScroll:true});}
     if(toPoke){const f=$('pokeForm');f.scrollIntoView({block:'center'});$('poke').focus({preventScroll:true});}
