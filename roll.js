@@ -10,7 +10,13 @@
 
 const R={state:null,timer:null,poll:null,flip:false,edit:null,tool:'1',spinning:false};
 function rollLeave(){clearInterval(R.timer);clearInterval(R.poll);R.timer=R.poll=null;}
-const TEACHER_SVG='<svg viewBox="0 0 24 24" width="60%" height="60%" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="3.5"/><path d="M5 21v-1.5A5.5 5.5 0 0 1 10.5 14h3a5.5 5.5 0 0 1 5.5 5.5V21"/><path d="M12 14v3"/></svg>';
+// Pictures on the seat map, so the teacher's cell is never read as 'you'. Typed labels get one
+// from the words a classroom label usually has; anything else stays text only.
+const TEACHER_EMOJI='🧑‍🏫',PODIUM_EMOJI='🎤',ME_EMOJI='🙋',TAKEN_EMOJI='👤';
+const LABEL_EMOJI=[[/門/,'🚪'],[/窗/,'🪟'],[/投影|布幕/,'📽️'],[/螢幕|電視/,'🖥️'],[/電腦/,'💻'],[/講桌|講台/,'🎤'],
+  [/桌/,'🪑'],[/櫃/,'🗄️'],[/冷氣/,'❄️'],[/插座|電源/,'🔌'],[/垃圾/,'🗑️']];
+const labelEmoji=text=>(LABEL_EMOJI.find(([re])=>re.test(text||''))||[])[1]||'';
+const pic=(emoji,text)=>`<span class="pic" aria-hidden="true">${emoji}</span>${text?`<small>${esc(text)}</small>`:''}`;
 // Seat 'r-c' as people say it: rows counted from the podium side, seats from the left as you face it.
 const ONLINE='線上';
 const isOnline=st=>!!(st&&st.layout&&st.layout.online);
@@ -34,9 +40,9 @@ const shortName=who=>[...who].slice(0,2).join('');
 // room half a circle. Layouts without a P cell get the podium above row 1, as before.
 const LABEL_DEFAULT={P:'講台',T:'老師'};
 function fixedCell(kind,text){
-  if(kind==='P')return `<span class="seat podcell" role="img" aria-label="${esc(text||'講台')}">${esc(text||'')}</span>`;
-  if(kind==='T')return `<span class="seat teach" role="img" aria-label="${esc(text||'老師')}">${TEACHER_SVG}${text&&text!=='老師'?`<small>${esc(text)}</small>`:''}</span>`;
-  if(kind==='L')return `<span class="seat label">${esc(text||'')}</span>`;
+  if(kind==='P')return `<span class="seat podcell" role="img" aria-label="${esc(text||'講台')}">${text?pic(PODIUM_EMOJI,text):''}</span>`;
+  if(kind==='T')return `<span class="seat teach" role="img" aria-label="${esc(text||'老師')}">${pic(TEACHER_EMOJI,text||'老師')}</span>`;
+  if(kind==='L')return `<span class="seat label">${labelEmoji(text)?pic(labelEmoji(text),text):esc(text||'')}</span>`;
   return '<span class="seat none" aria-hidden="true"></span>';
 }
 // The podium text goes on one P cell of each run, so a wide podium reads once.
@@ -108,10 +114,10 @@ function studentHtml(st){
         ${st.mine?'':'<p class="hint">如果你有來上課，請直接告訴老師，老師可以幫你補上。</p>'}</div>`;
   const taken=new Set(st.taken);
   return head+`<div class="card" style="margin-top:12px">${seatGrid(st.layout,seat=>
-      seat===st.mine?`<button type="button" class="seat mine" disabled aria-label="你的位置，${seatName(seat)}">我</button>`
-      :taken.has(seat)?`<button type="button" class="seat taken" disabled aria-label="${seatName(seat)}，已經有人"></button>`
+      seat===st.mine?`<button type="button" class="seat mine" disabled aria-label="你的位置，${seatName(seat)}">${pic(ME_EMOJI,'我')}</button>`
+      :taken.has(seat)?`<button type="button" class="seat taken" disabled aria-label="${seatName(seat)}，已經有人">${pic(TAKEN_EMOJI,'')}</button>`
       :`<button type="button" class="seat" data-seat="${seat}" ${st.open?'':'disabled'} aria-label="${seatName(seat)}，空位"></button>`)}
-    <div class="legend"><span><i style="background:var(--brand);border-color:var(--brand)"></i>你</span><span><i style="background:var(--surface-2)"></i>已經有人</span><span><i></i>空位</span></div></div>`;
+    <div class="legend"><span><b class="lpic" aria-hidden="true">${ME_EMOJI}</b>你</span><span><b class="lpic" aria-hidden="true">${TAKEN_EMOJI}</b>已經有人</span><span><i></i>空位</span><span><b class="lpic" aria-hidden="true">${TEACHER_EMOJI}</b>老師</span></div></div>`;
 }
 
 // Online: one button, no room.
@@ -219,7 +225,8 @@ function editorHtml(){
   const layout={rows:e.cells.map(r=>r.join('')),labels:e.labels};
   const grid=seatGrid({rows:layout.rows.map(()=> '1'.repeat(cols)),labels:{}},seat=>{
     const [r,c]=seat.split('-').map(Number),kind=e.cells[r-1][c-1];
-    const inner=kind==='1'?'':kind==='0'?'×':kind==='P'?esc(podiumText(layout,r,c)):kind==='T'?TEACHER_SVG:esc(e.labels[seat]||'');
+    const inner=kind==='1'?'':kind==='0'?'×':kind==='P'?(podiumText(layout,r,c)?pic(PODIUM_EMOJI,podiumText(layout,r,c)):'')
+      :kind==='T'?pic(TEACHER_EMOJI,e.labels[seat]||'老師'):labelEmoji(e.labels[seat])?pic(labelEmoji(e.labels[seat]),e.labels[seat]):esc(e.labels[seat]||'');
     const cls={1:'taken',0:'off',P:'podcell',T:'teach',L:'label'}[kind];
     return `<button type="button" class="seat ${cls}" data-cell="${seat}" aria-label="第 ${r} 列第 ${c} 格：${({1:'座位',0:'走道',P:'講台',T:'老師',L:'文字 '+(e.labels[seat]||'')})[kind]}">${inner}</button>`;
   },false,true);
