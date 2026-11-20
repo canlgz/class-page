@@ -390,7 +390,7 @@ function openAiPaint(st,editing){
   box.innerHTML=st.set&&!editing?`<div class="card">
       ${st.error?`<p class="err" style="margin-top:0">${esc(st.error)}</p>`:`<div class="hint" style="margin:0">本月已花費（OpenAI 帳單）</div><div class="big num">US$${Number(st.usd||0).toFixed(2)}</div>`}
       <p class="hint">管理員金鑰：<span class="num">${esc(st.masked)}</span>。老師私訊選單的標題列也會顯示這個金額，每小時更新一次。</p>
-      <div class="rowline"><button type="button" class="btn grow" data-openaiedit>換一把金鑰</button>
+      <div class="rowline" style="margin-top:12px"><button type="button" class="btn grow" data-openaiedit>換一把金鑰</button>
         <button type="button" class="btn" data-openaiclear style="color:var(--danger)">清除</button></div></div>`
     :`<form class="card" id="openAiForm" novalidate>
       <label class="f" for="openAiKey" style="margin-top:0">OpenAI 管理員金鑰（唯讀）</label>
