@@ -56,6 +56,18 @@ const QUERY=new URLSearchParams(location.search);
 const DEMO=QUERY.has('demo')||!CFG.liffId||!CFG.api;
 const auth={idToken:'',course:''};
 
+// The server refused the LINE ID token (it expires about an hour after login). Inside LINE a reload
+// gets a fresh one; in a browser the old login has to be dropped and done again. Once a minute at
+// most, so a token LINE keeps refusing shows the message instead of looping.
+function relogin(){
+  if(!window.liff)return false;
+  try{const last=+sessionStorage.getItem('liffRelogin')||0;if(Date.now()-last<60000)return false;sessionStorage.setItem('liffRelogin',String(Date.now()));}
+  catch(error){return false;}
+  if(liff.isInClient()){location.reload();return true;}
+  try{liff.logout();}catch(error){}
+  liff.login({redirectUri:location.href});
+  return true;
+}
 async function realApi(action,body={}){
   const stop=new AbortController(),timer=setTimeout(()=>stop.abort(),action==='summaryRefresh'?270000:25000);
   let reply;
@@ -66,6 +78,7 @@ async function realApi(action,body={}){
     reply=await res.json();
   }catch(error){throw Object.assign(new Error(error.name==='AbortError'?'等太久了，機器人沒有回應。':'連不上機器人，請檢查網路。'),{code:'network'});}
   finally{clearTimeout(timer);}
+  if(!reply.ok&&reply.error==='bad_token'&&relogin())return new Promise(()=>{}); // the page is leaving to log in again
   if(!reply.ok)throw Object.assign(new Error(reply.message||'發生錯誤'),{code:reply.error,retryAt:reply.retryAt});
   return reply.data;
 }
