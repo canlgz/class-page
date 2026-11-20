@@ -8,7 +8,7 @@
 // 老師看到的是依序排列的名字格，抽籤、補簽到、取消都照常。
 // 線上點名有 4 位數簽到碼：只顯示在老師畫面，老師口頭唸出，學生輸入正確才簽得到。
 
-const R={state:null,timer:null,poll:null,flip:false,edit:null,tool:'1',spinning:false};
+const R={state:null,timer:null,poll:null,flip:false,edit:null,tool:'1',spinning:false,hist:null,session:null};
 function rollLeave(){clearInterval(R.timer);clearInterval(R.poll);R.timer=R.poll=null;}
 // Pictures on the seat map, so the teacher's cell is never read as 'you'. Typed labels get one
 // from the words a classroom label usually has; anything else stays text only.
@@ -65,7 +65,7 @@ function seatGrid(layout,seatCell,flip,bare){
 
 // ---------- load and keep fresh ----------
 VIEW.roll=async function(){
-  const mine=++seq;skeleton(main,[72,300]);
+  const mine=++seq;skeleton(main,[72,300]);R.hist=null;
   try{
     R.state=await api('rollcall');if(mine!==seq||S.tab!=='roll')return;
     main.removeAttribute('aria-busy');rollPaint();rollWatch();
@@ -98,6 +98,8 @@ function rollPaint(){
   const keep=window.scrollY,typed=$('checkinCode')&&$('checkinCode').value;
   main.innerHTML=asTeacher()?(R.edit?editorHtml():teacherHtml(R.state)):studentHtml(R.state);
   if(typed&&$('checkinCode'))$('checkinCode').value=typed;
+  // The page refreshes itself during a roll call; an open 點名紀錄 stays open.
+  if(R.hist&&$('rollHist'))R.hist.records?rollSessionPaint(R.hist):rollHistPaint(R.hist);
   window.scrollTo(0,keep);
 }
 
@@ -328,12 +330,12 @@ main.addEventListener('click',async e=>{
   else if('rollstop' in d){busy(t,async()=>{try{rollTake(await api('rollStop'));toast('點名已結束');}catch(error){toast(error.message,'alert');}});}
   else if('rollhist' in d){
     const box=$('rollHist');skeleton(box,[56,56]);
-    try{const h=await api('rollHistory');if(!$('rollHist'))return;box.removeAttribute('aria-busy');
-      box.innerHTML=h.total?`<ul class="list">${h.sessions.map(s=>`<li><div class="grow"><b>${dayWeek(s.day)}</b> <span class="num">${esc(s.key)}</span><div class="meta"><span>${esc(s.layout)}</span></div></div><span class="num">${s.count} 人</span></li>`).join('')}</ul>
-        <h2>出席次數（共 ${h.total} 次點名）</h2><ul class="list">${h.people.map(p=>`<li><div class="grow"><b>${esc(p.who)}</b></div><span class="num">${p.count} / ${h.total}</span></li>`).join('')}</ul>
-        <p class="hint">由少到多排列；只列出這學期在群組發言過的人。</p>`:empty('還沒有點名紀錄。');
-    }catch(error){box.removeAttribute('aria-busy');box.innerHTML=problem(error,'view');}
+    try{const h=await api('rollHistory');if(!$('rollHist'))return;box.removeAttribute('aria-busy');rollHistPaint(h);}
+    catch(error){box.removeAttribute('aria-busy');box.innerHTML=problem(error,'view');}
   }
+  else if('rollsession' in d){rollSessionOpen(d.rollsession);}
+  else if('delrec' in d){rollDeleteRecord(t,d.delrec);}
+  else if('delsession' in d){rollDeleteSession(t);}
   else if('layoutedit' in d){editStart(d.layoutedit);}
   else if('editcancel' in d){R.edit=null;rollPaint();rollWatch();}
   else if('tool' in d){R.edit.name=$('layoutName').value;R.tool=d.tool;rollPaint();}
@@ -393,6 +395,52 @@ main.addEventListener('submit',e=>{
   }
 });
 
+// ---------- 點名紀錄：每一場點開看、刪單筆或整場 ----------
+// Each record keeps the moment the student checked in (day, week, time); a roll call is named by
+// the day and time it started (rollsession = "day|key").
+function rollHistPaint(h){
+  const box=$('rollHist');if(!box)return;R.hist=h;
+  box.innerHTML=h.total?`<p class="hint">點一場可以看每個人的點名時間，也可以刪除。</p><ul class="list">${h.sessions.map(s=>`<li><button type="button" class="rowbtn" data-rollsession="${esc(s.day+'|'+s.key)}">
+      <div class="grow"><b>${dayWeek(s.day)}</b> <span class="num">${esc(s.key)}</span><div class="meta"><span>${esc(s.layout)}</span></div></div>
+      <span class="num">${s.count} 人 ›</span></button></li>`).join('')}</ul>
+    <h2>出席次數（共 ${h.total} 次點名）</h2><ul class="list">${h.people.map(p=>`<li><div class="grow"><b>${esc(p.who)}</b></div><span class="num">${p.count} / ${h.total}</span></li>`).join('')}</ul>
+    <p class="hint">由少到多排列；只列出這學期在群組發言過的人。</p>`:empty('還沒有點名紀錄。');
+}
+function rollSessionPaint(r){
+  const box=$('rollHist');if(!box)return;R.session={day:r.day,key:r.key};R.hist=r;
+  box.innerHTML=`<button type="button" class="btn" data-rollhist>‹ 回到點名紀錄</button>
+    <h2 style="margin-top:12px">${dayWeek(r.day)} <span class="num">${esc(r.key)}</span> 開始的點名</h2>
+    ${r.records.length?`<ul class="list">${r.records.map(x=>`<li><div class="grow"><b>${esc(x.who)}</b><div class="meta">
+        <span class="num">${esc(x.day.slice(5).replace('-','/'))} ${esc(x.time)}</span>${x.week?`<span class="wk">${esc(x.week)}</span>`:''}<span>${esc(x.seat)}</span></div></div>
+        <button type="button" class="btn" data-delrec="${x.row}" aria-label="刪除 ${esc(x.who)} 的點名紀錄" style="color:var(--danger)">刪除</button></li>`).join('')}</ul>`
+      :empty('這場已經沒有紀錄。')}
+    <button type="button" class="btn block" data-delsession style="margin-top:12px;color:var(--danger)">刪除這整場點名</button>
+    <p class="hint">時間是學生實際點名（或老師補簽）的那一刻。</p>`;
+}
+async function rollSessionOpen(id){
+  const [day,key]=id.split('|'),box=$('rollHist');skeleton(box,[56,56,56]);
+  try{const r=await api('rollRecords',{day,key});box.removeAttribute('aria-busy');rollSessionPaint(r);}
+  catch(error){box.removeAttribute('aria-busy');box.innerHTML=problem(error,'view');}
+}
+function rollConfirm(title,note,label,go){
+  const close=sheet(`<h3 id="sheetTitle">${esc(title)}</h3><p class="hint">${esc(note)}</p>
+    <div class="row"><button type="button" class="btn" data-close>取消</button><button type="button" class="btn primary" id="rollDeleteGo" style="background:var(--danger);border-color:var(--danger)">${esc(label)}</button></div>`);
+  $('rollDeleteGo').addEventListener('click',e=>busy(e.currentTarget,async()=>{if(await go())close();}));
+}
+function rollDeleteRecord(btn,row){
+  const s=R.session,who=btn.closest('li').querySelector('b').textContent;
+  rollConfirm('刪除 '+who+' 的這筆點名？','刪除後無法復原，出席次數會少一次。','刪除',async()=>{
+    try{const r=await api('rollDeleteRecord',{...s,row:+row});rollSessionPaint(r);if(r.state)R.state=r.state;toast('已刪除 '+who+' 的點名紀錄');return true;}
+    catch(error){toast(error.message,'alert');return false;}});
+}
+function rollDeleteSession(){
+  const s=R.session;
+  rollConfirm('刪除整場點名？',s.day+' '+s.key+' 開始的這場點名，所有人的紀錄都會刪除，無法復原。','刪除整場',async()=>{
+    try{const r=await api('rollDeleteSession',s);R.session=null;rollTake(r.state);
+      requestAnimationFrame(()=>rollHistPaint(r.history));toast('已刪除這場點名（'+r.deleted+' 筆）');return true;}
+    catch(error){toast(error.message,'alert');return false;}});
+}
+
 // ---------- demo data (示範模式) ----------
 const DR={layouts:{a:{name:'台達館 105',rows:['L0PPP0T','1110111','1110111','1110111','0110110'],labels:{'1-1':'投影幕'}},
   b:{name:'人社院 C310',rows:['11111','11111','11111']}},def:'a',session:null,pins:[],n:0};
@@ -418,7 +466,7 @@ function demoRoll(action,b){
   const next=()=>ONLINE+(Math.max(0,...DR.pins.map(p=>+p.seat.slice(ONLINE.length)||0))+1);
   const put=(who,seat,time)=>{if(DR.pins.some(p=>p.seat===seat&&p.who!==who))fail('taken','這個位置剛剛被別人點走了，請選另一個。');
     const mine=DR.pins.find(p=>p.who===who);if(mine)Object.assign(mine,{seat,time});else DR.pins.push({who,seat,time});};
-  if(['rollStart','rollStop','rollDraw','rollReset','rollAssign','rollHistory','layoutSave','layoutDelete'].includes(action)&&!teacher)fail('teacher_only','這個功能只有老師能用。');
+  if(['rollStart','rollStop','rollDraw','rollReset','rollAssign','rollHistory','rollRecords','rollDeleteRecord','rollDeleteSession','layoutSave','layoutDelete'].includes(action)&&!teacher)fail('teacher_only','這個功能只有老師能用。');
   switch(action){
     case 'rollcall':return state();
     case 'pin':if(!open)fail('closed','現在不是點名時間。');
@@ -433,13 +481,24 @@ function demoRoll(action,b){
     case 'rollReset':s.drawn=[];s.last=null;return state();
     case 'rollAssign':{const who=DEMO_PEOPLE[b.person-3];if(b.seat==='')DR.pins=DR.pins.filter(p=>p.who!==who);
       else if(s.layout.online){if(!DR.pins.some(p=>p.who===who))put(who,next(),'10:09 老師');}else put(who,b.seat,'10:09 老師');return state();}
-    case 'rollHistory':return {total:3,sessions:[{day:today,key:'10:00',week:week(today),layout:'台達館 105',count:DR.pins.length},{day:taipei(-7),key:'10:02',week:week(taipei(-7)),layout:'台達館 105',count:5},{day:taipei(-14),key:'10:01',week:week(taipei(-14)),layout:'台達館 105',count:6}],
-      people:DEMO_PEOPLE.map((who,i)=>({person:i+3,who,count:[3,3,2,3,1,2][i]})).sort((x,y)=>x.count-y.count)};
+    case 'rollHistory':{const past=[{day:taipei(-7),key:'10:02',week:week(taipei(-7)),layout:'台達館 105',count:5},{day:taipei(-14),key:'10:01',week:week(taipei(-14)),layout:'台達館 105',count:6}];
+      const sessions=DR.session?[{day:DR.session.day,key:DR.session.key,week:week(DR.session.day),layout:DR.session.layout.name,count:DR.pins.length},...past]:past;
+      return {total:sessions.length,sessions,
+      people:DEMO_PEOPLE.map((who,i)=>({person:i+3,who,count:[3,3,2,3,1,2][i]})).sort((x,y)=>x.count-y.count)};}
     case 'layoutSave':{const id=b.id&&DR.layouts[b.id]?b.id:'n'+(DR.n++);DR.layouts[id]={name:b.name,rows:b.rows,labels:b.labels||{}};
       let synced=null;
       if(DR.session&&!DR.session.layout.online&&DR.def===id){DR.session.layout=DR.layouts[id];
         synced={open:!DR.session.closed,moved:DR.pins.filter(p=>{const [r,c]=p.seat.split('-').map(Number);return (b.rows[r-1]||'')[c-1]!=='1';}).length};}
       return {id,state:state(),synced};}
     case 'layoutDelete':delete DR.layouts[b.id];return state();
+    case 'rollRecords':{const cur=DR.session&&b.day===DR.session.day&&b.key===DR.session.key;
+      return {day:b.day,key:b.key,records:cur?DR.pins.map((p,i)=>({row:i+2,who:p.who,seat:p.seat,day:today,week:week(today),time:p.time})):
+        DEMO_PEOPLE.slice(0,3).map((who,i)=>({row:100+i,who,seat:'2-'+(i+1),day:b.day,week:week(b.day),time:b.key}))};}
+    case 'rollDeleteRecord':{const cur=DR.session&&b.day===DR.session.day&&b.key===DR.session.key;
+      if(cur){const p=DR.pins[b.row-2];if(!p)fail('invalid','這筆紀錄已經不在了，請重新整理。');DR.pins.splice(b.row-2,1);s.drawn=s.drawn.filter(w=>w!==p.who);}
+      const r=demoRoll('rollRecords',b);if(!cur)r.records=r.records.filter(x=>x.row!==b.row);r.state=state();return r;}
+    case 'rollDeleteSession':{const cur=DR.session&&b.day===DR.session.day&&b.key===DR.session.key;
+      if(cur&&open)fail('invalid','這次點名還在進行中，請先結束再刪除。');const n=cur?DR.pins.length:3;if(cur){DR.session=null;DR.pins=[];}
+      const h=demoRoll('rollHistory',{});return {deleted:n,history:h,state:state()};}
   }
 }
