@@ -226,4 +226,6 @@ textarea.t{min-height:96px;resize:vertical}
 .summary-notices ul{list-style:none;margin:var(--s2) 0 0;padding:0;font-size:14px}
 .summary-notices li+li{margin-top:var(--s1)}
 .summary-notices .summary-role{margin-right:var(--s1)}
+.summary-fold{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.summary-more{padding-left:0;min-height:44px;color:var(--brand);font-weight:600;text-decoration:none}
 

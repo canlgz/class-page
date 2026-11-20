@@ -96,7 +96,7 @@ function demoSummaries(){
       {time:d1+' 09:05',who:'陳語彤',text:'老師，下週的訪談可以改成線上嗎？'},
       {time:d1+' 09:15',who:'老師',text:'可以，請先確認受訪者方便的時間。'},
       {time:d2+' 14:05',who:'林冠宇',text:'我們這組先把問題整理在共筆。'},
-      {time:d2+' 14:12',who:'陳語彤',text:'收到，我晚點補上訪綱。'}]:[];
+      {time:d2+' 16:30',who:'老師',day:summaryDay(day,2),text:'本週課堂縮影\n\n各位好，今天我先說明了期中報告的格式與評分方式，接著請各組分享訪談對象的安排。大家對逐字稿要不要逐句標時間有不少疑問，我的建議是每段開頭標一次即可。\n\n提醒：下週改成線上上課，連結會在當天早上公布；訪綱請在週日晚上前上傳到 eeclass。'}]:[];
     const refreshed=demoSummaryRefreshes.get(demo.course)?.weeks.get(day);
     const summary=low?{headline:'零星確認了訪談改成線上的安排。',threads:[],pending:[],
         formative:{understanding:[{when:'零散訊息',text:'零星確認了訪談改成線上的安排。'}],stuck:[],next:['下週確認各組的訪談時間。']}}:{
@@ -337,8 +337,13 @@ function summaryStats(w){
 function summaryLow(w){
   return `<div class="summary-section summary-low">
     <p class="hint">${w.lines.length?`本週只有 ${w.stats.messages} 則，直接列出：`:'本週還沒有文字訊息。'}</p>
-    ${w.lines.length?`<ul class="summary-rows">${w.lines.map(({time,who,text})=>
-      `<li><div class="meta"><b>${esc(who)}</b><span class="num">${esc(time)}</span></div><div class="text">${esc(text)}</div></li>`).join('')}</ul>`:''}</div>`;
+    ${w.lines.length?`<ul class="summary-rows">${w.lines.map(({time,who,text,day,cut},i)=>{
+      // Long messages are folded to three lines with a button, never cut off mid-word.
+      const long=text.length>90||(text.match(/\n/g)||[]).length>2,id='summaryLine'+i;
+      return `<li><div class="meta"><b>${esc(who)}</b><span class="num">${esc(time)}</span></div>
+        <div class="text${long?' summary-fold':''}" id="${id}">${esc(text)}${cut?'…':''}</div>
+        ${long?`<button type="button" class="linkbtn summary-more" data-summary-more="${id}" aria-controls="${id}" aria-expanded="false">展開全文</button>`:''}
+        ${cut&&day?`<button type="button" class="linkbtn summary-more" data-summary-log="${esc(day)}">全文太長，到歷程看這一天</button>`:''}</li>`;}).join('')}</ul>`:''}</div>`;
 }
 
 function summaryPending(pending,limit){
@@ -740,6 +745,10 @@ main.addEventListener('click',async e=>{
   if('summaryTab' in d){S.summaryTab=d.summaryTab;summaryScreen();$('summaryTab-'+d.summaryTab)?.focus({preventScroll:true});return;}
   if('summaryLog' in d){S.tab='log';S.summaryView='';S.day=d.summaryLog;S.q='';S.kind='all';S.person=null;render();main.focus({preventScroll:true});return;}
   if('unday' in d){S.day='';render();return;}
+  if('summaryMore' in d){
+    const box=$(d.summaryMore),open=t.getAttribute('aria-expanded')==='true';
+    box.classList.toggle('summary-fold',open);t.setAttribute('aria-expanded',String(!open));t.textContent=open?'展開全文':'收合';return;
+  }
   if('summaryAll' in d){
     const expanded=t.getAttribute('aria-expanded')==='true';
     $('summaryPeople').querySelectorAll('[data-summary-extra]').forEach(row=>{row.hidden=expanded;});
