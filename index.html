@@ -168,15 +168,15 @@ async function demoApi(action,b={}){
     case 'saveSettings':if(b.name!=null)demo.name=b.name;if(b.forward!=null)demo.forward=b.forward;if(b.week1!=null)demo.week1=b.week1&&monday(b.week1);return {name:demo.name,forward:demo.forward,...(b.week1!=null?{week1:demo.week1||monday(taipei(-66)),week1Auto:!demo.week1}:{})};
     case 'broadcast':return {sent:b.rows.length};
     case 'schedule':{const {schedule}=demoMeeting();
-      return {schedule,suggestion:!schedule&&demo.course==='a'?{day:3,start:'13:20',end:'16:20',mode:'online'}:null};}
+      return {schedule,suggestion:!schedule&&demo.course==='a'?{day:3,start:'13:20',end:'16:20'}:null};}
     case 'scheduleSave':{
-      const {day,start,end,mode}=b,minutes=t=>typeof t==='string'&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t)?+t.slice(0,2)*60+ +t.slice(3):NaN;
+      const {day,start,end}=b,minutes=t=>typeof t==='string'&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t)?+t.slice(0,2)*60+ +t.slice(3):NaN;
       const duration=minutes(end)-minutes(start);
-      if(!Number.isInteger(day)||day<1||day>7||!(duration>=30&&duration<=300)||!['online','onsite'].includes(mode))
-        throw Object.assign(new Error('請選擇星期、上課方式及開始和結束時間，上課長度須為 30 分鐘到 5 小時。'),{code:'invalid'});
+      if(!Number.isInteger(day)||day<1||day>7||!(duration>=30&&duration<=300))
+        throw Object.assign(new Error('請選擇星期、開始和結束時間，上課長度須為 30 分鐘到 5 小時。'),{code:'invalid'});
       const meeting=demoMeeting(),weekly=meeting.weekly;
-      meeting.schedule={day,start,end,mode};
-      const created=mode==='online'&&(!weekly||weekly.day!==day||weekly.start!==start||weekly.end!==end);
+      meeting.schedule={day,start,end};
+      const created=!!weekly&&(weekly.day!==day||weekly.start!==start||weekly.end!==end);
       if(created){meeting.weekly=meeting.schedule;meeting.meet=demoMeetUrl();}
       return {schedule:meeting.schedule,meet:meeting.meet,created};
     }
@@ -184,7 +184,9 @@ async function demoApi(action,b={}){
       if(String(b.url||'').trim()===''){demoMeeting().meet='';return {meet:''};}
       if(!m)throw Object.assign(new Error('請貼上 Google Meet 的會議連結，例如 https://meet.google.com/abc-defg-hij'),{code:'invalid'});
       const meet='https://meet.google.com/'+m[1].toLowerCase();demoMeeting().meet=meet;return {meet};}
-    case 'meetCreate':{const meet=demoMeetUrl();demoMeeting().meet=meet;return {meet};}
+    case 'meetCreate':{const meeting=demoMeeting();
+      meeting.meet=demoMeetUrl();if(meeting.schedule)meeting.weekly=meeting.schedule;
+      return {meet:meeting.meet,created:true};}
     case 'meetSend':throw Object.assign(new Error('請在群組裡打 //會議，機器人會用回覆貼出連結（不花訊息額度）。'),{code:'use_reply'});
     case 'summaries':return demoSummaries();
     case 'summaryRefresh':{
@@ -281,8 +283,9 @@ const nickForm=()=>`<h2>我的暱稱</h2>
       </form>`;
 // Format the saved time for the overview and the copied Meet text.
 const scheduleDays='一二三四五六日';
-const scheduleLabel=(value,showMode)=>value
-  ?`每週${scheduleDays[value.day-1]} ${value.start}–${value.end}${showMode?(value.mode==='online'?'・線上':'・實體'):''}`
+const scheduleMeetHint='設定上課時間後，建立會議連結時會在日曆排每週重複的活動，整學期用同一個連結。';
+const scheduleLabel=value=>value
+  ?`每週${scheduleDays[value.day-1]} ${value.start}–${value.end}`
   :'還沒設定上課時間';
 // Keep the copied text consistent with botLiffMeetText_.
 const meetText=url=>{const day=taipei(),[,m,d]=day.split('-').map(Number),w=week(day);
@@ -290,13 +293,13 @@ const meetText=url=>{const day=taipei(),[,m,d]=day.split('-').map(Number),w=week
   return `【線上上課】${S.info.course}\n${w?'第 '+w.slice(1)+' 週・':''}${m}/${d}（${'日一二三四五六'[new Date(day+'T00:00:00Z').getUTCDay()]}）${time}\nGoogle Meet 會議連結：\n${url}`;};
 function meetCard(){
   const editing=S.meetEdit||!S.meet;
-  return `<section id="meetCard"><h2>Google Meet</h2><p class="hint">${esc(scheduleLabel(S.schedule,true))}
+  return `<section id="meetCard"><h2>Google Meet</h2><p class="hint">${esc(scheduleLabel(S.schedule))}
     ${S.schedule?'':'<button type="button" class="linkbtn meet-schedule-link" data-scheduleopen>設定上課時間</button>'}</p>${editing
     ?`<form class="card" id="meetForm" novalidate>
         <label class="f" for="meetUrl" style="margin-top:0">Google Meet 會議連結</label>
         <input class="t" id="meetUrl" type="url" inputmode="url" autocomplete="off" spellcheck="false" value="${esc(S.meet)}"
           placeholder="https://meet.google.com/abc-defg-hij" aria-describedby="meetHelp meetErr">
-        <p class="hint" id="meetHelp">在「設定」儲存線上上課時間即可建立每週連結。臨時開會也可以貼上現成連結，或產生單次會議。</p>
+        <p class="hint" id="meetHelp">${scheduleMeetHint} 尚未設定時間時會建立單次會議。</p>
         <p class="err" id="meetErr" role="alert" hidden></p>
         <button class="btn primary block" style="margin-top:12px" type="submit">儲存連結</button>
         <button type="button" class="btn block" style="margin-top:8px" data-meetnew>${ic('plus')}產生新的會議連結</button>
@@ -308,7 +311,7 @@ function meetCard(){
         <button type="button" class="btn primary block" data-meetshare>在群組打 //會議</button>
         <div class="rowline" style="margin-top:8px"><button type="button" class="btn grow" data-meetnew>${ic('plus')}產生新的會議連結</button>
           <button type="button" class="btn grow" data-meetedit>${ic('edit')}貼上別的</button></div>
-        <p class="hint">臨時開會可貼上現成連結，或在 Gmail 日曆建立單次會議。群組將使用這裡顯示的連結。</p></div>`}</section>`;
+        <p class="hint">在群組打 //會議，就會貼出這裡顯示的連結。</p></div>`}</section>`;
 }
 function meetRepaint(){const el=$('meetCard');if(el)el.outerHTML=meetCard();}
 // A new Meet from the teacher's Gmail (meet-helper/). Replacing a saved link asks first.
@@ -355,9 +358,7 @@ async function loadSchedule(box){
         <div><label class="f" for="scheduleStart">開始</label><input class="t" type="time" id="scheduleStart" value="${esc(value.start||'')}" required></div>
         <div><label class="f" for="scheduleEnd">結束</label><input class="t" type="time" id="scheduleEnd" value="${esc(value.end||'')}" required></div>
       </div>
-      <label class="f" for="scheduleMode">上課方式</label>
-      <select class="t" id="scheduleMode" required><option value="">請選擇</option>
-        <option value="online" ${value.mode==='online'?'selected':''}>線上</option><option value="onsite" ${value.mode==='onsite'?'selected':''}>實體</option></select>
+      <p class="hint">${scheduleMeetHint}</p>
       <p class="hint" id="scheduleSuggestion" ${suggestion?'':'hidden'}>依這學期的訊息推算，請確認</p>
       <p class="hint" id="scheduleStatus" role="status" hidden></p><p class="err" id="scheduleError" role="alert" hidden></p>
       <button type="submit" class="btn primary block" style="margin-top:16px">儲存上課時間</button>
@@ -871,7 +872,7 @@ main.addEventListener('submit',e=>{
     return;
   }
   if(form.id==='scheduleForm'){
-    const schedule={day:+$('scheduleDay').value,start:$('scheduleStart').value,end:$('scheduleEnd').value,mode:$('scheduleMode').value};
+    const schedule={day:+$('scheduleDay').value,start:$('scheduleStart').value,end:$('scheduleEnd').value};
     const status=$('scheduleStatus'),message=$('scheduleError');
     status.hidden=true;message.hidden=true;
     return busy(btn,async()=>{
