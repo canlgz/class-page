@@ -87,7 +87,7 @@ const demo={teacher:QUERY.get('demo')==='teacher',nick:QUERY.get('demo')==='teac
 const demoMeetings=new Map();
 // Keep the demo's Meet and class time separate for each course.
 function demoMeeting(){
-  if(!demoMeetings.has(demo.course))demoMeetings.set(demo.course,{meet:'',schedule:null,weekly:null});
+  if(!demoMeetings.has(demo.course))demoMeetings.set(demo.course,{meet:'',schedule:null});
   return demoMeetings.get(demo.course);
 }
 // Generate a placeholder Meet URL without calling the helper.
@@ -97,7 +97,6 @@ function demoMeetUrl(){
 }
 function demoCreateMeet(meeting){
   meeting.meet=demoMeetUrl();
-  meeting.weekly=meeting.schedule?{...meeting.schedule,url:meeting.meet}:null;
   return {meet:meeting.meet,created:true};
 }
 const DEMO_COURSES=[['a','媒體產業研究',0,'10:42'],['b','數位敘事工作坊',-1,'16:05'],['c','傳播理論',-4,'09:30']];
@@ -181,10 +180,9 @@ async function demoApi(action,b={}){
       const duration=minutes(end)-minutes(start);
       if(!Number.isInteger(day)||day<1||day>7||!(duration>=30&&duration<=300))
         throw Object.assign(new Error('請選擇星期、開始和結束時間，上課長度須為 30 分鐘到 5 小時。'),{code:'invalid'});
-      const meeting=demoMeeting(),weekly=meeting.weekly;
+      const meeting=demoMeeting();
       meeting.schedule={day,start,end};
-      const sameWeekly=weekly&&weekly.url===meeting.meet&&weekly.day===day&&weekly.start===start&&weekly.end===end;
-      return {schedule:meeting.schedule,...(sameWeekly?{meet:meeting.meet,created:false}:demoCreateMeet(meeting))};
+      return {schedule:meeting.schedule,...(meeting.meet?{meet:meeting.meet,created:false}:demoCreateMeet(meeting))};
     }
     case 'meetSave':{const m=/^(?:https?:\/\/)?meet\.google\.com\/([a-z]{3}-[a-z]{4}-[a-z]{3})(?:[/?#].*)?$/i.exec(String(b.url||'').trim());
       if(String(b.url||'').trim()===''){demoMeeting().meet='';return {meet:''};}
@@ -287,7 +285,7 @@ const nickForm=()=>`<h2>我的暱稱</h2>
       </form>`;
 // Format the recurring class time for the Meet overview.
 const scheduleDays='一二三四五六日';
-const scheduleMeetHint='儲存上課時間後，會自動建立整學期固定的會議連結（日曆每週重複）';
+const scheduleMeetHint='儲存上課時間後，會自動建立這門課固定的會議連結（不會出現在行事曆）';
 const scheduleLabel=value=>value
   ?`每週${scheduleDays[value.day-1]} ${value.start}–${value.end}`
   :'還沒設定上課時間';
@@ -309,14 +307,14 @@ function meetText(url){
 }
 function meetCard(){
   const editing=S.meetEdit||!S.meet,next=meetSessionLine();
-  const createLabel=S.meet||S.schedule?'重新產生會議連結':'產生單次會議連結';
+  const createLabel=S.meet?'重新產生會議連結':'產生會議連結';
   return `<section id="meetCard"><h2>Google Meet</h2>${next?`<p><strong>${esc(next)}</strong></p>`:''}<p class="hint">${esc(scheduleLabel(S.schedule))}
     ${S.schedule?'':'<button type="button" class="linkbtn meet-schedule-link" data-scheduleopen>設定上課時間</button>'}</p>${editing
     ?`<form class="card" id="meetForm" novalidate>
         <label class="f" for="meetUrl" style="margin-top:0">Google Meet 會議連結</label>
         <input class="t" id="meetUrl" type="url" inputmode="url" autocomplete="off" spellcheck="false" value="${esc(S.meet)}"
           placeholder="https://meet.google.com/abc-defg-hij" aria-describedby="meetHelp meetErr">
-        <p class="hint" id="meetHelp">${S.schedule?'重新產生時，日曆會建立每週重複的活動。':scheduleMeetHint+'。'}</p>
+        <p class="hint" id="meetHelp">${S.schedule?'這門課的連結整學期都能用，改上課時間也不用換；不會出現在行事曆。':scheduleMeetHint+'。'}</p>
         <p class="err" id="meetErr" role="alert" hidden></p>
         <button class="btn primary block" style="margin-top:12px" type="submit">儲存連結</button>
         <button type="button" class="btn block" style="margin-top:8px" data-meetnew>${ic('plus')}${createLabel}</button>
@@ -337,7 +335,7 @@ async function meetCreate(btn){
     catch(error){toast(error.message,'alert');return false;}};
   if(!S.meet)return busy(btn,go);
   const close=sheet(`<h3 id="sheetTitle">重新產生會議連結？</h3>
-    <p class="hint">目前存的連結會換成新的。舊的會議還留在你的 Gmail 日曆裡，不受影響。</p>
+    <p class="hint">目前存的連結會換成新的，之後在群組打 //線上 會貼出新的連結。</p>
     <div class="row"><button type="button" class="btn" data-close>取消</button><button type="button" class="btn primary" id="meetNewGo">${ic('plus')}重新產生</button></div>`);
   $('meetNewGo').addEventListener('click',e=>busy(e.currentTarget,async()=>{if(await go())close();}));
 }
@@ -905,7 +903,7 @@ main.addEventListener('submit',e=>{
         const r=await api('scheduleSave',schedule);if($('scheduleForm')!==form)return;
         S.schedule=r.schedule;S.meet=r.meet;
         $('scheduleSuggestion').hidden=true;
-        status.textContent=r.created?'已儲存，並建立整學期固定的會議連結':'已儲存';
+        status.textContent=r.created?'已儲存，並建立這門課固定的會議連結':'已儲存';
         status.hidden=false;
         if(r.meetError){message.textContent=r.meetError;message.hidden=false;}
       }catch(error){
