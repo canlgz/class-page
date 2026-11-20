@@ -165,7 +165,7 @@ function demoSummaries(){
 }
 async function demoApi(action,b={}){
   await new Promise(r=>setTimeout(r,500));
-  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend','meetCreate','schedule','scheduleSave','summaryRefresh','openAiStatus','openAiKeySave'].includes(action))
+  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend','meetCreate','schedule','scheduleSave','summaryRefresh','openAiStatus','openAiKeySave','luckyStatus','luckySwitch'].includes(action))
     throw Object.assign(new Error('這個功能只有老師能用。'),{code:'teacher_only'});
   const pub=({...r})=>r;
   switch(action){
@@ -188,6 +188,9 @@ async function demoApi(action,b={}){
     case 'broadcast':return {sent:b.rows.length};
     case 'schedule':{const {schedule}=demoMeeting();
       return {schedule,suggestion:!schedule&&demo.course==='a'?{day:3,start:'13:20',end:'16:20'}:null};}
+    case 'luckyStatus':return demo.lucky||{on:false,today:today,level:0,n:4,counted:0,winner:'',winners:[]};
+    case 'luckySwitch':{const v=demo.lucky||{on:false,today:today,level:1,n:4,counted:2,winner:'',winners:[{day:taipei(-7),who:'王子晴',n:6}]};
+      v.on=!!b.on;demo.lucky=v;return v;}
     case 'openAiStatus':return demo.openAi||{set:false,masked:''};
     case 'openAiKeySave':{const key=String(b.key||'').trim();
       if(!key){demo.openAi={set:false,masked:''};return demo.openAi;}
@@ -382,6 +385,28 @@ function meetShareDialog(){
 }
 
 // Load the teacher-only schedule form and prefill a suggestion when there is no saved time.
+// 幸運號碼: one switch per class, today's number (the teacher only), and this semester's winners.
+const LUCKY_RULES='🍀 幸運號碼\n1. 每次上課都有一個幸運號碼，只有老師知道。\n2. 在群組發 5 個字以上的訊息就算一則，每人每天最多算 3 則。\n3. 數到幸運號碼的那一則，發的人就是今天的幸運兒，機器人會在群組恭喜你，老師有小獎勵！\n4. 中過的人休息兩次上課；剛好輪到休息中的人，就順延給下一則。\n5. 當天沒人中，下次的號碼會變小，比較容易中 🔥';
+function luckyPaint(v){
+  const box=$('luckySettings');if(!box)return;S.lucky=v;
+  const today=!v.on?'':!v.today?'今天不是這門課的上課日，不會開獎。'
+    :v.winner?`今天已開出：<b>${esc(v.winner)}</b>（第 ${v.n} 則）`
+    :`今天的幸運號碼：<b>第 ${v.n} 則</b>，已數到 ${v.counted} 則${v.level?`（加碼 ${v.level} 次）`:''}`;
+  box.innerHTML=`<div class="card">
+    <div class="rowline"><span class="tag ${v.on?'ok':''}">${v.on?'開啟中':'關閉'}</span><span class="grow"></span>
+      <button type="button" class="btn${v.on?'':' primary'}" data-luckyswitch="${v.on?'off':'on'}">${v.on?'關掉':'打開幸運號碼'}</button></div>
+    ${today?`<p style="margin:12px 0 0">${today}</p><p class="hint">號碼只有你看得到。可以在課堂上說「快到了！」炒熱氣氛。</p>`:''}
+    <details style="margin-top:12px"><summary>給學生看的規則</summary><p class="hint" style="white-space:pre-line">${esc(LUCKY_RULES)}</p>
+      <button type="button" class="btn block" data-luckycopy>複製規則</button></details>
+    ${v.winners&&v.winners.length?`<h3 style="margin:16px 0 4px;font-size:15px">這學期的幸運兒</h3><ul class="list">${v.winners.map(w=>`<li><div class="grow"><b>${esc(w.who)}</b><div class="meta"><span class="num">${esc(w.day.slice(5).replace('-','/'))}</span><span>第 ${w.n} 則</span></div></div></li>`).join('')}</ul>`:''}
+  </div>`;
+}
+async function loadLucky(box){
+  if(!box)return;skeleton(box,[76]);
+  try{const v=await api('luckyStatus');if($('luckySettings')!==box)return;box.removeAttribute('aria-busy');luckyPaint(v);}
+  catch(error){box.removeAttribute('aria-busy');box.innerHTML=problem(error,'view');}
+}
+
 // OpenAI's spend this month on the teacher's LINE menu needs a read-only Admin key. It is saved here
 // because the Apps Script editor's script-property page is full; the page only ever sees its ends.
 const OPENAI_KEY_HELP='到 platform.openai.com → Settings → Organization → Admin keys，建一把「唯讀」的管理員金鑰貼在這裡。存的時候會先實際查一次花費確認可用。';
@@ -752,6 +777,7 @@ const VIEW={
   async set(){
     main.innerHTML=`<h2>切換課程</h2><div id="courses"></div>
       <h2>上課時間</h2><div id="scheduleSettings"></div>
+      <h2>🍀 幸運號碼</h2><div id="luckySettings"></div>
       <h2>這堂課的設定</h2>
       <form class="card" id="setForm" novalidate>
         <label class="f" for="gname" style="margin-top:0">群組名稱</label>
@@ -775,7 +801,7 @@ const VIEW={
       <h2>OpenAI 花費</h2><div id="openAiSettings"></div>
       <h2>系統</h2><div class="card"><span class="num">備份機器人 ${esc(S.info.version)}</span>
         <p class="hint">詳細狀態請在和機器人的私聊點狀態列左側，或輸入 //狀態。</p></div>`;
-    const scheduleLoaded=loadSchedule($('scheduleSettings'));loadOpenAi($('openAiSettings'));
+    const scheduleLoaded=loadSchedule($('scheduleSettings'));loadOpenAi($('openAiSettings'));loadLucky($('luckySettings'));
     const box=$('courses');skeleton(box,[56,56]);
     try{
       const courses=await api('courses');if($('courses')!==box)return;
@@ -898,6 +924,15 @@ main.addEventListener('click',async e=>{
   }
   if('meetshare' in d){meetShareDialog();return;}
   if('scheduleopen' in d){$('tabs').querySelector('[data-tab="set"]').click();return;}
+  if('luckyswitch' in d){
+    const on=d.luckyswitch==='on';
+    busy(t,async()=>{try{luckyPaint(await api('luckySwitch',{on}));toast(on?'已打開幸運號碼，從下一則發言開始數':'已關掉幸運號碼，紀錄會保留');}catch(error){toast(error.message,'alert');}});
+    return;
+  }
+  if('luckycopy' in d){
+    navigator.clipboard.writeText(LUCKY_RULES).then(()=>toast('已複製規則，可以貼到群組或公告'),()=>toast('沒辦法自動複製，請長按上面的文字選取','alert'));
+    return;
+  }
   if('openaiedit' in d){openAiPaint(S.openAi,true);$('openAiKey').focus();return;}
   if('openaicancel' in d){openAiPaint(S.openAi,false);return;}
   if('openaiclear' in d){
