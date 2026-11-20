@@ -153,7 +153,7 @@ function demoSummaries(){
 }
 async function demoApi(action,b={}){
   await new Promise(r=>setTimeout(r,500));
-  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend','meetCreate','schedule','scheduleSave','summaries','summaryRefresh'].includes(action))
+  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend','meetCreate','schedule','scheduleSave','summaryRefresh'].includes(action))
     throw Object.assign(new Error('這個功能只有老師能用。'),{code:'teacher_only'});
   const pub=({...r})=>r;
   switch(action){
@@ -218,7 +218,7 @@ const api=(action,body={})=>(DEMO?demoApi:realApi)(action,S.preview?{...body,asS
 // ---------- state ----------
 const S={preview:false,tab:'log',q:'',day:'',summaryTab:'talk',kind:'all',fileKind:'upload',person:null,select:false,picked:new Map(),range:'this',from:'',to:'',info:null,courses:null};
 // Five tabs at most: the teacher finds files through 歷程's 檔案與圖片 filter.
-const TABS={student:[['log','歷程','list'],['files','檔案','folder'],['roll','點名','pin'],['me','我的','user']],
+const TABS={student:[['log','歷程','list'],['sum','摘要','chart'],['files','檔案','folder'],['roll','點名','pin'],['me','我的','user']],
             teacher:[['home','總覽','chart'],['log','歷程','list'],['roll','點名','pin'],['hand','繳交','check2'],['set','設定','gear']]};
 const FORWARD=[[0,'即時'],[120,'每 2 小時'],[360,'每 6 小時'],[720,'每 12 小時'],[1440,'每天一次'],[-1,'暫停']];
 let seq=0;                       // a slow answer must not overwrite a newer screen
@@ -386,7 +386,8 @@ async function loadSchedule(box){
   }
 }
 
-// The summary screens stay inside the teacher's 總覽 tab. A week is made of discussion segments the
+// The summary screens sit in the teacher's 總覽 tab and the students' 摘要 tab; students read the same
+// content but cannot refresh it (the server refuses summaryRefresh for them). A week is made of discussion segments the
 // server summarised (src/aiSummary.js); counts and who-replied-to-whom are computed, the rest is AI.
 const SUMMARY_DAYS='一二三四五六日';
 const SUMMARY_SETUP='尚未設定 OpenAI 金鑰：到 Apps Script 專案設定的指令碼屬性加入 OPENAI_API_KEY';
@@ -438,13 +439,13 @@ function summaryPending(pending,limit){
 
 // What stands between the saved summary and the log as it is now.
 function summaryState(w){
-  const {configured,quietMinutes}=S.summaryData;
-  if(!configured)return `<p class="hint summary-message">${SUMMARY_SETUP}</p>`;
+  const {configured,quietMinutes}=S.summaryData,t=asTeacher();
+  if(!configured)return `<p class="hint summary-message">${t?SUMMARY_SETUP:'摘要尚未產生。'}</p>`;
   if(w.low)return '';
   const parts=[];
-  if(w.error)parts.push(`<p class="err summary-message" role="alert">${esc(w.error)}${w.summary?' 下面是上次成功產生的內容。':''}</p>`);
+  if(w.error&&t)parts.push(`<p class="err summary-message" role="alert">${esc(w.error)}${w.summary?' 下面是上次成功產生的內容。':''}</p>`);
   if(w.fresh)parts.push(`<p class="hint summary-message">${w.waiting?`討論還在進行：有 ${w.fresh} 則還沒摘要，安靜 ${quietMinutes} 分鐘後會自動產生。`:`有 ${w.fresh} 則還沒摘要，下次排程會補上。`}</p>`);
-  else if(!w.summary&&!w.error)parts.push(`<p class="hint summary-message">${w.loose?`這週的訊息很零散，沒有一段討論達到 ${S.summaryData.minMessages} 則。`:'摘要尚未產生。'}</p>`);
+  else if(!w.summary&&(!w.error||!t))parts.push(`<p class="hint summary-message">${w.loose?`這週的訊息很零散，沒有一段討論達到 ${S.summaryData.minMessages} 則。`:'摘要尚未產生。'}</p>`);
   return parts.join('');
 }
 
@@ -503,7 +504,7 @@ function summaryPeople(w){
     ${w.people.length>8?`<button type="button" class="btn block summary-expand" data-summary-all="${w.people.length}"
       aria-controls="summaryPeople" aria-expanded="false">顯示全部 ${w.people.length} 人</button>`:''}
     ${w.silent&&w.silent.length?`<details class="summary-silent"><summary>本週沒有發言：${w.silent.length} 人</summary>
-      <p>${esc(w.silent.join('、'))}</p><p class="hint">名單是這學期在群組出現過的人；只有老師看得到。</p></details>`:''}`;
+      <p>${esc(w.silent.join('、'))}</p><p class="hint">名單是這學期在群組出現過的人。</p></details>`:''}`;
 }
 
 function summaryData(w){
@@ -527,7 +528,7 @@ function summaryMeta(w){
 
 function summaryRefreshButton(w,primary){
   const {configured}=S.summaryData;
-  if(!configured||w.stats.messages<3)return '';
+  if(!asTeacher()||!configured||w.stats.messages<3)return '';
   return `<button type="button" class="btn${primary?' primary':''}" data-summary-refresh="${esc(w.monday)}">${summaryLive(w)?'現在更新摘要':'重新產生'}</button>`;
 }
 
@@ -558,7 +559,7 @@ function summaryDetail(w){
 function summaryHome(){
   const w=S.summaryData.weeks[0];
   $('weeklySummary').innerHTML=w?summaryCard(w):`<section class="card summary-card"><h2>本週至今</h2>
-    ${!S.summaryData.configured?`<p class="hint">${SUMMARY_SETUP}</p>`:''}
+    ${!S.summaryData.configured&&asTeacher()?`<p class="hint">${SUMMARY_SETUP}</p>`:''}
     <p class="hint">這堂課尚未開始，還沒有可查看的週次。</p></section>`;
 }
 
@@ -568,11 +569,11 @@ async function loadSummary(mine){
     const data=await api('summaries');
     if(mine!==seq)return;
     // An older backend answers in another shape; without `fresh` this page cannot draw it.
-    if(data.weeks.length&&!('fresh' in data.weeks[0])){box.remove();return;}
+    if(data.weeks.length&&!('fresh' in data.weeks[0])){if(asTeacher())box.remove();else box.innerHTML=empty('摘要暫時無法顯示。');return;}
     S.summaryData=data;box.removeAttribute('aria-busy');summaryHome();
   }catch(error){
     if(mine!==seq)return;
-    if(error.code==='bad_request'){box.remove();return;}
+    if(error.code==='bad_request'){if(asTeacher())box.remove();else box.innerHTML=empty('這堂課還沒有開始，還沒有摘要。');return;}
     box.removeAttribute('aria-busy');box.innerHTML=problem(error,'summary');
   }
 }
@@ -581,16 +582,16 @@ function summaryScreen(){
   const {weeks,configured,minMessages}=S.summaryData,view=S.summaryView;
   const returnButton=(target,label)=>`<button type="button" class="btn summary-return" data-summary-view="${target}">‹ ${label}</button>`;
   if(view==='weeks'){
-    main.innerHTML=returnButton('home','返回總覽')+`<h2 class="summary-list-title">各週摘要</h2>
+    main.innerHTML=returnButton('home',asTeacher()?'返回總覽':'返回本週')+`<h2 class="summary-list-title">各週摘要</h2>
       <div class="summary-weeks">${weeks.map(w=>`<button type="button" class="tile summary-week" data-summary-view="${esc(w.monday)}">
           <span class="summary-heading"><strong>${esc(w.w)}</strong><span class="hint num">${esc(w.range)}・${w.stats.messages} 則</span>${summaryLive(w)?summaryProgress():''}</span>
-          <span class="summary-week-line">${w.summary?esc(w.summary.headline):w.low?'少於 '+minMessages+' 則，直接列出':configured?'摘要尚未產生':'尚未設定 OpenAI 金鑰'}</span>
+          <span class="summary-week-line">${w.summary?esc(w.summary.headline):w.low?'少於 '+minMessages+' 則，直接列出':configured||!asTeacher()?'摘要尚未產生':'尚未設定 OpenAI 金鑰'}</span>
           ${w.summary&&w.summary.pending.length?`<span class="tag summary-role wait">還沒有人回應・${w.summary.pending.length}</span>`:''}</button>`).join('')}</div>`;
     return;
   }
   const index=weeks.findIndex(w=>w.monday===view),w=weeks[index];
   const older=weeks[index+1],newer=index>0?weeks[index-1]:null;
-  main.innerHTML=returnButton(S.summaryBack,S.summaryBack==='weeks'?'返回各週摘要':'返回總覽')+summaryDetail(w)+
+  main.innerHTML=returnButton(S.summaryBack,S.summaryBack==='weeks'?'返回各週摘要':asTeacher()?'返回總覽':'返回本週')+summaryDetail(w)+
     `<div class="summary-nav" role="group" aria-label="切換週次">
       ${older?`<button type="button" class="btn" data-summary-neighbor="${esc(older.monday)}">‹ 上一週 ${esc(older.w)}</button>`:''}
       ${newer?`<button type="button" class="btn" data-summary-neighbor="${esc(newer.monday)}">下一週 ${esc(newer.w)} ›</button>`:''}
@@ -645,6 +646,12 @@ const VIEW={
     main.innerHTML=`<div class="chips">${chip('fkind','upload','全部',S.fileKind)}${chip('fkind','doc','文件',S.fileKind)}${chip('fkind','media','圖片與影音',S.fileKind)}</div>
       <p class="hint">LINE 上已經過期的檔案，這裡也拿得回來。</p><div id="list" style="margin-top:12px"></div>`;
     fillList($('list'),{kind:S.fileKind},'這個分類還沒有檔案。');
+  },
+  // Students read the same weekly summaries as the teacher, without the refresh buttons.
+  sum(){
+    if(S.summaryView&&S.summaryData){summaryScreen();return;}
+    const mine=++seq;main.innerHTML='<div id="weeklySummary"></div><p class="hint">摘要由 AI 依群組對話整理，老師更新後這裡就會看到新的內容。</p>';
+    loadSummary(mine);
   },
   me(){
     main.innerHTML=`<h2>我在這堂課的紀錄</h2><div id="stats"></div><div id="list" style="margin-top:16px"></div>
