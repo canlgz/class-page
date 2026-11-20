@@ -152,7 +152,7 @@ function demoSummaries(){
 }
 async function demoApi(action,b={}){
   await new Promise(r=>setTimeout(r,500));
-  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend','meetCreate','schedule','scheduleSave','summaryRefresh'].includes(action))
+  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend','meetCreate','schedule','scheduleSave','summaryRefresh','openAiStatus','openAiKeySave'].includes(action))
     throw Object.assign(new Error('這個功能只有老師能用。'),{code:'teacher_only'});
   const pub=({...r})=>r;
   switch(action){
@@ -175,6 +175,11 @@ async function demoApi(action,b={}){
     case 'broadcast':return {sent:b.rows.length};
     case 'schedule':{const {schedule}=demoMeeting();
       return {schedule,suggestion:!schedule&&demo.course==='a'?{day:3,start:'13:20',end:'16:20'}:null};}
+    case 'openAiStatus':return demo.openAi||{set:false,masked:''};
+    case 'openAiKeySave':{const key=String(b.key||'').trim();
+      if(!key){demo.openAi={set:false,masked:''};return demo.openAi;}
+      if(!/^sk-admin-[A-Za-z0-9_-]{20,}$/.test(key))throw Object.assign(new Error('請貼上 OpenAI 的管理員金鑰，開頭是 sk-admin-。'),{code:'invalid'});
+      demo.openAi={set:true,masked:key.slice(0,9)+'…'+key.slice(-4),usd:3.73};return demo.openAi;}
     case 'scheduleSave':{
       const {day,start,end}=b,minutes=t=>typeof t==='string'&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t)?+t.slice(0,2)*60+ +t.slice(3):NaN;
       const duration=minutes(end)-minutes(start);
@@ -364,6 +369,30 @@ function meetShareDialog(){
 }
 
 // Load the teacher-only schedule form and prefill a suggestion when there is no saved time.
+// OpenAI's spend this month on the teacher's LINE menu needs a read-only Admin key. It is saved here
+// because the Apps Script editor's script-property page is full; the page only ever sees its ends.
+const OPENAI_KEY_HELP='到 platform.openai.com → Settings → Organization → Admin keys，建一把「唯讀」的管理員金鑰貼在這裡。存的時候會先實際查一次花費確認可用。';
+function openAiPaint(st,editing){
+  const box=$('openAiSettings');if(!box)return;S.openAi=st;
+  box.innerHTML=st.set&&!editing?`<div class="card">
+      ${st.error?`<p class="err" style="margin-top:0">${esc(st.error)}</p>`:`<div class="hint" style="margin:0">本月已花費（OpenAI 帳單）</div><div class="big num">US$${Number(st.usd||0).toFixed(2)}</div>`}
+      <p class="hint">管理員金鑰：<span class="num">${esc(st.masked)}</span>。老師私訊選單的標題列也會顯示這個金額，每小時更新一次。</p>
+      <div class="rowline"><button type="button" class="btn grow" data-openaiedit>換一把金鑰</button>
+        <button type="button" class="btn" data-openaiclear style="color:var(--danger)">清除</button></div></div>`
+    :`<form class="card" id="openAiForm" novalidate>
+      <label class="f" for="openAiKey" style="margin-top:0">OpenAI 管理員金鑰（唯讀）</label>
+      <input class="t" id="openAiKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-admin-…" aria-describedby="openAiHelp openAiErr">
+      <p class="hint" id="openAiHelp">${OPENAI_KEY_HELP}</p>
+      <p class="err" id="openAiErr" role="alert" hidden></p>
+      <button class="btn primary block" style="margin-top:12px" type="submit">儲存金鑰</button>
+      ${st.set?'<button type="button" class="btn block" style="margin-top:8px" data-openaicancel>取消</button>':''}</form>`;
+}
+async function loadOpenAi(box){
+  if(!box)return;skeleton(box,[76]);
+  try{const st=await api('openAiStatus');if($('openAiSettings')!==box)return;box.removeAttribute('aria-busy');openAiPaint(st,false);}
+  catch(error){box.removeAttribute('aria-busy');box.innerHTML=problem(error,'view');}
+}
+
 async function loadSchedule(box){
   skeleton(box,[135]);
   try{
@@ -730,9 +759,10 @@ const VIEW={
       <h2>學生看到的畫面</h2>
       <div class="card"><p class="hint" style="margin-top:0">用學生的權限打開「歷程／檔案／我的」：老師功能會被拒絕，看得到的範圍和學生一樣。只有你的手機會看到，群組裡不會出現任何訊息。<br>注意：在這裡改暱稱，改的是你自己在這堂課的名字（學生在歷程裡會看到）；戳戳會私訊給你自己。</p>
         <button type="button" class="btn block" style="margin-top:12px" data-preview>預覽學生畫面</button></div>
+      <h2>OpenAI 花費</h2><div id="openAiSettings"></div>
       <h2>系統</h2><div class="card"><span class="num">備份機器人 ${esc(S.info.version)}</span>
         <p class="hint">詳細狀態請在和機器人的私聊點狀態列左側，或輸入 //狀態。</p></div>`;
-    const scheduleLoaded=loadSchedule($('scheduleSettings'));
+    const scheduleLoaded=loadSchedule($('scheduleSettings'));loadOpenAi($('openAiSettings'));
     const box=$('courses');skeleton(box,[56,56]);
     try{
       const courses=await api('courses');if($('courses')!==box)return;
@@ -855,6 +885,14 @@ main.addEventListener('click',async e=>{
   }
   if('meetshare' in d){meetShareDialog();return;}
   if('scheduleopen' in d){$('tabs').querySelector('[data-tab="set"]').click();return;}
+  if('openaiedit' in d){openAiPaint(S.openAi,true);$('openAiKey').focus();return;}
+  if('openaicancel' in d){openAiPaint(S.openAi,false);return;}
+  if('openaiclear' in d){
+    const close=sheet(`<h3 id="sheetTitle">清除 OpenAI 管理員金鑰？</h3><p class="hint">清除後老師選單不再顯示 OpenAI 花費。金鑰本身在 OpenAI 後台還在，要停用請到那裡刪除。</p>
+      <div class="row"><button type="button" class="btn" data-close>取消</button><button type="button" class="btn primary" id="openAiClearGo">清除</button></div>`);
+    $('openAiClearGo').addEventListener('click',e=>busy(e.currentTarget,async()=>{try{openAiPaint(await api('openAiKeySave',{key:''}),false);close();toast('已清除管理員金鑰');}catch(error){toast(error.message,'alert');}}));
+    return;
+  }
   if('meetnew' in d){meetCreate(t);return;}
   if('meetedit' in d){S.meetEdit=true;meetRepaint();$('meetUrl').focus();return;}
   if('meetcancel' in d){S.meetEdit=false;meetRepaint();return;}
@@ -897,6 +935,13 @@ main.addEventListener('submit',e=>{
     if(!v)return fail('meetErr','meetUrl','請貼上 Google Meet 的會議連結。');
     busy(btn,async()=>{try{const r=await api('meetSave',{url:v});S.meet=r.meet;S.meetEdit=false;meetRepaint();toast('已儲存會議連結');}
       catch(error){fail('meetErr','meetUrl',error.message);}});
+    return;
+  }
+  if(form.id==='openAiForm'){
+    const v=$('openAiKey').value.trim();
+    if(!v)return fail('openAiErr','openAiKey','請貼上管理員金鑰。');
+    busy(btn,async()=>{try{const st=await api('openAiKeySave',{key:v});openAiPaint(st,false);toast('已儲存，本月已花費 US$'+Number(st.usd||0).toFixed(2));}
+      catch(error){fail('openAiErr','openAiKey',error.message);}});
     return;
   }
   if(form.id==='scheduleForm'){
