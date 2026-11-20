@@ -239,3 +239,37 @@ textarea.t{min-height:96px;resize:vertical}
 .summary-fold{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .summary-more{padding-left:0;min-height:44px;color:var(--brand);font-weight:600;text-decoration:none}
 
+
+/* ---- 學生版：呼應學生的群組選單（暖色漸層、圓角、每個分頁一種顏色）。老師版不受影響。 ---- */
+body.student{
+  --bg:#fff8f3; --surface-2:#fbefe9; --line:#f0dcd3; --brand:#cf3a60; --on-brand:#ffffff; --brand-soft:#ffe6ee;
+  --ring:#cf3a60; --radius:16px; --sun:#ff9a62; --rose:#ff6f91;
+}
+@media (prefers-color-scheme:dark){body.student{
+  --bg:#140f12; --surface:#1d1619; --surface-2:#2a2025; --line:#3a2c32; --brand:#ff8fab; --on-brand:#1d1016;
+  --brand-soft:#3a1a26; --ring:#ff8fab; --sun:#8a3a2a; --rose:#7a2446;
+}}
+body.student .top{background:linear-gradient(135deg,var(--sun),var(--rose));border-bottom:0;color:#fff;
+  border-radius:0 0 20px 20px;padding-bottom:var(--s3)}
+body.student .top h1{font-size:18px}
+body.student .top small{color:#fff3ea;font-size:13px}
+body.student main{padding-top:var(--s4)}
+body.student .card{border-radius:var(--radius)}
+body.student .btn{border-radius:12px}
+body.student .btn.primary{background:var(--brand);border-color:var(--brand)}
+body.student nav.tabs{border-top:0;box-shadow:0 -4px 16px rgba(207,58,96,.08)}
+body.student nav.tabs button[aria-current=page]{color:var(--brand)}
+body.student nav.tabs button[aria-current=page]::before{left:30%;right:30%;height:4px;border-radius:0 0 4px 4px;
+  background:linear-gradient(90deg,var(--sun),var(--rose))}
+body.student nav.tabs button[aria-current=page] svg.i{background:var(--brand-soft);border-radius:999px;padding:3px;width:30px;height:28px}
+/* Each student tab takes the colour of its tile on the group menu. */
+body.student[data-tab=roll]{--brand:#0f6e56;--brand-soft:#e3f7ee}
+body.student[data-tab=sum]{--brand:#4c3ca8;--brand-soft:#eeeafe}
+body.student[data-tab=log]{--brand:#9a4a12;--brand-soft:#fff0e3}
+body.student[data-tab=files]{--brand:#0c447c;--brand-soft:#e6f1fb}
+@media (prefers-color-scheme:dark){
+  body.student[data-tab=roll]{--brand:#5dcaa5;--brand-soft:#0b2a22}
+  body.student[data-tab=sum]{--brand:#afa9ec;--brand-soft:#221d47}
+  body.student[data-tab=log]{--brand:#f0997b;--brand-soft:#3a1d10}
+  body.student[data-tab=files]{--brand:#85b7eb;--brand-soft:#0c2240}
+}

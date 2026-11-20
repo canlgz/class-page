@@ -230,8 +230,13 @@ const when=t=>t?dayLabel(t.day)+' '+t.time:'—';
 function toast(text,icon='ok'){const t=$('toast');t.innerHTML=ic(icon)+`<span>${esc(text)}</span>`;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('on'),4000);}
 // The teacher may look at the student tabs; the server still knows it is the teacher.
 const asTeacher=()=>S.info.teacher&&!S.preview;
+// Students get the warm look of their group menu and a greeting for the time of day (Taipei); the
+// teacher's view keeps its plain look. The teacher's student preview shows the students' look.
+function greeting(){const h=new Date(Date.now()+8*3600e3).getUTCHours();
+  return h>=5&&h<11?'早安 ☀️':h>=11&&h<14?'午安 🍱':h>=14&&h<18?'下午好 🧋':h>=18&&h<23?'晚安 🌙':'夜深了 🦉';}
 function header(){$('course').textContent=S.info.course;document.title=S.info.course+'・課堂頁面';
-  $('who').textContent=asTeacher()?'老師檢視':(S.info.nickname||'尚未設定暱稱')+'（你）';$('preview').hidden=!S.preview;}
+  const t=asTeacher();document.body.classList.toggle('student',!t);
+  $('who').textContent=t?'老師檢視':greeting()+'，'+(S.info.nickname||'尚未設定暱稱')+'（你）';$('preview').hidden=!S.preview;}
 function tabs(){$('tabs').innerHTML=TABS[asTeacher()?'teacher':'student'].map(([id,label,icon])=>`<button type="button" data-tab="${id}" ${id===S.tab?'aria-current="page"':''}>${ic(icon)}<span>${label}</span></button>`).join('');}
 function skeleton(target=main,heights=[56,56,56,56]){target.setAttribute('aria-busy','true');target.innerHTML='<p class="sr">載入中</p>'+heights.map(h=>`<div class="sk" style="height:${h}px;margin-bottom:12px"></div>`).join('');}
 const chip=(group,value,label,cur)=>`<button type="button" class="chip" data-${group}="${value}" aria-pressed="${cur===value}">${label}</button>`;
@@ -738,7 +743,7 @@ const VIEW={
     await scheduleLoaded;
   }
 };
-function render(){seq++;main.removeAttribute('aria-busy');if(typeof rollLeave==='function')rollLeave();tabs();window.scrollTo(0,0);const old=document.querySelector('.actionbar');if(old)old.remove();VIEW[S.tab]();}
+function render(){seq++;main.removeAttribute('aria-busy');document.body.dataset.tab=S.tab;if(typeof rollLeave==='function')rollLeave();tabs();window.scrollTo(0,0);const old=document.querySelector('.actionbar');if(old)old.remove();VIEW[S.tab]();}
 
 async function stats(){
   const box=$('stats');box.innerHTML='<div class="sk" style="height:76px"></div>';
