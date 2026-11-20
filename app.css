@@ -109,6 +109,11 @@ textarea.t{min-height:96px;resize:vertical}
 @keyframes sk{0%{background-position:100% 0}100%{background-position:0 0}}
 @media (prefers-reduced-motion:reduce){.sk{animation:none}.toast,.btn{transition:none}}
 .linkbtn{border:0;background:none;color:inherit;font:inherit;font-weight:700;text-decoration:underline;padding:4px 8px;min-height:32px;cursor:pointer}
+.meet-schedule-link{min-height:44px}
+#scheduleForm{color-scheme:light dark}
+.schedule-times{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s3)}
+.schedule-times input.t{min-width:0}
+#scheduleForm>label:first-child{margin-top:0}
 .wk{display:inline-block;margin-left:6px;padding:0 6px;border-radius:6px;background:var(--brand-soft);color:var(--brand);font-size:12px;font-weight:700;line-height:1.6;font-variant-numeric:tabular-nums}
 .podium{margin:0 auto var(--s3);width:60%;text-align:center;font-size:13px;padding:6px;border-radius:8px;background:var(--surface-2);color:var(--ink-2)}
 .seats{display:grid;gap:4px;margin:0 auto;max-width:520px}

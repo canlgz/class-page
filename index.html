@@ -83,6 +83,17 @@ const FAKE=[
  [-2,'14:05','黃品叡','image','圖片'],[-3,'11:48','王子晴','file','第一組_企劃書v2.pdf'],[-3,'11:30','林柏宇','text','第三組下週三可以先跟老師約時間討論嗎？'],
 ].map((r,i,a)=>({row:9+a.length-i,day:taipei(r[0]),time:r[1],who:r[2],type:r[3],text:r[4],upload:r[3]!=='text',mine:r[2]===(QUERY.get('demo')==='teacher'?'老師':'陳語彤')}));
 const demo={teacher:QUERY.get('demo')==='teacher',nick:QUERY.get('demo')==='teacher'?'老師':'陳語彤',name:'媒體產業研究',forward:-1,course:'a'};
+const demoMeetings=new Map();
+// Keep the demo's Meet and class time separate for each course.
+function demoMeeting(){
+  if(!demoMeetings.has(demo.course))demoMeetings.set(demo.course,{meet:'',schedule:null,weekly:null});
+  return demoMeetings.get(demo.course);
+}
+// Generate a placeholder Meet URL without calling the helper.
+function demoMeetUrl(){
+  const letters=n=>[...Array(n)].map(()=>'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random()*26)]).join('');
+  return `https://meet.google.com/${letters(3)}-${letters(4)}-${letters(3)}`;
+}
 const DEMO_COURSES=[['a','媒體產業研究',0,'10:42'],['b','數位敘事工作坊',-1,'16:05'],['c','傳播理論',-4,'09:30']];
 const demoSummaryRefreshes=new Map();
 function demoSummaries(){
@@ -136,7 +147,7 @@ function demoSummaries(){
 }
 async function demoApi(action,b={}){
   await new Promise(r=>setTimeout(r,500));
-  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend','meetCreate','summaries','summaryRefresh'].includes(action))
+  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend','meetCreate','schedule','scheduleSave','summaries','summaryRefresh'].includes(action))
     throw Object.assign(new Error('這個功能只有老師能用。'),{code:'teacher_only'});
   const pub=({...r})=>r;
   switch(action){
@@ -147,7 +158,7 @@ async function demoApi(action,b={}){
     case 'overview':{const t=FAKE.filter(r=>r.day===today);
       return {today:{messages:t.filter(r=>!r.upload).length,uploads:t.filter(r=>r.upload).length,people:new Set(t.map(r=>r.who)).size,last:t[0].time},
         week:[-6,-5,-4,-3,-2,-1,0].map(d=>({day:taipei(d),count:FAKE.filter(r=>r.day===taipei(d)).length})),
-        meet:demo.meet||'',roster:DEMO_PEOPLE.map((who,i)=>{const a=FAKE.filter(r=>r.who===who);return {person:i+3,who,messages:a.filter(r=>!r.upload).length,files:a.filter(r=>r.upload).length,last:a[0]?{day:a[0].day,time:a[0].time}:null};})
+        meet:demoMeeting().meet,schedule:demoMeeting().schedule,roster:DEMO_PEOPLE.map((who,i)=>{const a=FAKE.filter(r=>r.who===who);return {person:i+3,who,messages:a.filter(r=>!r.upload).length,files:a.filter(r=>r.upload).length,last:a[0]?{day:a[0].day,time:a[0].time}:null};})
           .sort((x,y)=>y.messages+y.files-x.messages-x.files)};}
     case 'handin':{const done=[],missing=[];DEMO_PEOPLE.forEach((who,i)=>{const r=FAKE.find(x=>x.who===who&&x.upload&&x.day>=b.from&&x.day<=b.to);
       r?done.push({person:i+3,who,file:r.text,day:r.day,time:r.time}):missing.push({person:i+3,who});});return {from:b.from,to:b.to,done,missing};}
@@ -156,13 +167,25 @@ async function demoApi(action,b={}){
     case 'poke':return {sent:true};
     case 'saveSettings':if(b.name!=null)demo.name=b.name;if(b.forward!=null)demo.forward=b.forward;if(b.week1!=null)demo.week1=b.week1&&monday(b.week1);return {name:demo.name,forward:demo.forward,...(b.week1!=null?{week1:demo.week1||monday(taipei(-66)),week1Auto:!demo.week1}:{})};
     case 'broadcast':return {sent:b.rows.length};
+    case 'schedule':{const {schedule}=demoMeeting();
+      return {schedule,suggestion:!schedule&&demo.course==='a'?{day:3,start:'13:20',end:'16:20',mode:'online'}:null};}
+    case 'scheduleSave':{
+      const {day,start,end,mode}=b,minutes=t=>typeof t==='string'&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t)?+t.slice(0,2)*60+ +t.slice(3):NaN;
+      const duration=minutes(end)-minutes(start);
+      if(!Number.isInteger(day)||day<1||day>7||!(duration>=30&&duration<=300)||!['online','onsite'].includes(mode))
+        throw Object.assign(new Error('請選擇星期、上課方式及開始和結束時間，上課長度須為 30 分鐘到 5 小時。'),{code:'invalid'});
+      const meeting=demoMeeting(),weekly=meeting.weekly;
+      meeting.schedule={day,start,end,mode};
+      const created=mode==='online'&&(!weekly||weekly.day!==day||weekly.start!==start||weekly.end!==end);
+      if(created){meeting.weekly=meeting.schedule;meeting.meet=demoMeetUrl();}
+      return {schedule:meeting.schedule,meet:meeting.meet,created};
+    }
     case 'meetSave':{const m=/^(?:https?:\/\/)?meet\.google\.com\/([a-z]{3}-[a-z]{4}-[a-z]{3})(?:[/?#].*)?$/i.exec(String(b.url||'').trim());
-      if(String(b.url||'').trim()===''){demo.meet='';return {meet:''};}
+      if(String(b.url||'').trim()===''){demoMeeting().meet='';return {meet:''};}
       if(!m)throw Object.assign(new Error('請貼上 Google Meet 的會議連結，例如 https://meet.google.com/abc-defg-hij'),{code:'invalid'});
-      demo.meet='https://meet.google.com/'+m[1].toLowerCase();return {meet:demo.meet};}
-    case 'meetCreate':{const r=n=>[...Array(n)].map(()=>'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random()*26)]).join('');
-      demo.meet=`https://meet.google.com/${r(3)}-${r(4)}-${r(3)}`;return {meet:demo.meet};}
-    case 'meetSend':if(!demo.meet)throw Object.assign(new Error('請先存一個 Google Meet 連結。'),{code:'invalid'});return {sent:true};
+      const meet='https://meet.google.com/'+m[1].toLowerCase();demoMeeting().meet=meet;return {meet};}
+    case 'meetCreate':{const meet=demoMeetUrl();demoMeeting().meet=meet;return {meet};}
+    case 'meetSend':throw Object.assign(new Error('請在群組裡打 //會議，機器人會用回覆貼出連結（不花訊息額度）。'),{code:'use_reply'});
     case 'summaries':return demoSummaries();
     case 'summaryRefresh':{
       const day=b.monday||monday(today);
@@ -256,31 +279,36 @@ const nickForm=()=>`<h2>我的暱稱</h2>
         <p class="err" id="nickErr" role="alert" hidden></p>
         <button class="btn primary block" style="margin-top:12px" type="submit">儲存暱稱</button>
       </form>`;
-// 總覽's Google Meet card: one saved link per class, posted into the group on 發到群組 (after a
-// confirmation that shows the exact message). Backend: botLiffMeetSave_ / botLiffMeetSend_.
-// Same text as botLiffMeetText_: class, then 第 N 週・M/D（週）, then the link.
-const meetText=url=>{const [,m,d]=today.split('-').map(Number),w=week(today);
-  return `【線上上課】${S.info.course}\n${w?'第 '+w.slice(1)+' 週・':''}${m}/${d}（${'日一二三四五六'[new Date(today+'T00:00:00Z').getUTCDay()]}）\nGoogle Meet 會議連結：\n${url}`;};
+// Format the saved time for the overview and the copied Meet text.
+const scheduleDays='一二三四五六日';
+const scheduleLabel=(value,showMode)=>value
+  ?`每週${scheduleDays[value.day-1]} ${value.start}–${value.end}${showMode?(value.mode==='online'?'・線上':'・實體'):''}`
+  :'還沒設定上課時間';
+// Keep the copied text consistent with botLiffMeetText_.
+const meetText=url=>{const day=taipei(),[,m,d]=day.split('-').map(Number),w=week(day);
+  const time=S.schedule?'\n'+scheduleLabel(S.schedule):'';
+  return `【線上上課】${S.info.course}\n${w?'第 '+w.slice(1)+' 週・':''}${m}/${d}（${'日一二三四五六'[new Date(day+'T00:00:00Z').getUTCDay()]}）${time}\nGoogle Meet 會議連結：\n${url}`;};
 function meetCard(){
   const editing=S.meetEdit||!S.meet;
-  return `<section id="meetCard"><h2>線上上課</h2>${editing
+  return `<section id="meetCard"><h2>Google Meet</h2><p class="hint">${esc(scheduleLabel(S.schedule,true))}
+    ${S.schedule?'':'<button type="button" class="linkbtn meet-schedule-link" data-scheduleopen>設定上課時間</button>'}</p>${editing
     ?`<form class="card" id="meetForm" novalidate>
         <label class="f" for="meetUrl" style="margin-top:0">Google Meet 會議連結</label>
         <input class="t" id="meetUrl" type="url" inputmode="url" autocomplete="off" spellcheck="false" value="${esc(S.meet)}"
           placeholder="https://meet.google.com/abc-defg-hij" aria-describedby="meetHelp meetErr">
-        <p class="hint" id="meetHelp">貼上一次就會記住。之後每次上課，按「發到群組」就好。</p>
+        <p class="hint" id="meetHelp">在「設定」儲存線上上課時間即可建立每週連結。臨時開會也可以貼上現成連結，或產生單次會議。</p>
         <p class="err" id="meetErr" role="alert" hidden></p>
         <button class="btn primary block" style="margin-top:12px" type="submit">儲存連結</button>
-        <button type="button" class="btn block" style="margin-top:8px" data-meetnew>${ic('plus')}或者，產生新的會議連結</button>
+        <button type="button" class="btn block" style="margin-top:8px" data-meetnew>${ic('plus')}產生新的會議連結</button>
         ${S.meet?`<div class="rowline" style="margin-top:8px"><button type="button" class="btn grow" data-meetcancel>取消</button>
           <button type="button" class="btn" data-meetremove style="color:var(--danger)">移除連結</button></div>`:''}
       </form>`
     :`<div class="card"><div class="f" style="margin-top:0">Google Meet 會議連結</div>
         <p class="num" style="margin:4px 0 12px;word-break:break-all">${esc(S.meet)}</p>
-        <button type="button" class="btn primary block" data-meetsend>${ic('send')}發到群組</button>
-        <div class="rowline" style="margin-top:8px"><button type="button" class="btn grow" data-meetnew>${ic('plus')}產生新的連結</button>
+        <button type="button" class="btn primary block" data-meetshare>在群組打 //會議</button>
+        <div class="rowline" style="margin-top:8px"><button type="button" class="btn grow" data-meetnew>${ic('plus')}產生新的會議連結</button>
           <button type="button" class="btn grow" data-meetedit>${ic('edit')}貼上別的</button></div>
-        <p class="hint">「產生新的連結」會用你的 Gmail 開一個新的 Google Meet，並加進 Gmail 的日曆。</p></div>`}</section>`;
+        <p class="hint">臨時開會可貼上現成連結，或在 Gmail 日曆建立單次會議。群組將使用這裡顯示的連結。</p></div>`}</section>`;
 }
 function meetRepaint(){const el=$('meetCard');if(el)el.outerHTML=meetCard();}
 // A new Meet from the teacher's Gmail (meet-helper/). Replacing a saved link asks first.
@@ -293,15 +321,51 @@ async function meetCreate(btn){
     <div class="row"><button type="button" class="btn" data-close>取消</button><button type="button" class="btn primary" id="meetNewGo">${ic('plus')}產生</button></div>`);
   $('meetNewGo').addEventListener('click',e=>busy(e.currentTarget,async()=>{if(await go())close();}));
 }
-function meetSendDialog(){
-  const close=sheet(`<h3 id="sheetTitle">把會議連結發到群組？</h3>
-    <div class="card" style="white-space:pre-wrap;word-break:break-all;font-size:14px;margin:8px 0">${esc(meetText(S.meet))}</div>
-    <p class="hint">群組裡每個人都會看到。會用掉一則 LINE 訊息額度。</p>
-    <p class="err" id="meetSendErr" role="alert" hidden></p>
-    <div class="row"><button type="button" class="btn" data-close>取消</button><button type="button" class="btn primary" id="meetGo">${ic('send')}發送</button></div>`);
-  $('meetGo').addEventListener('click',e=>busy(e.currentTarget,async()=>{
-    try{await api('meetSend');close();toast('已發到群組');}
-    catch(error){const el=$('meetSendErr');el.textContent=error.message;el.hidden=false;}}));
+// The group command gives the bot a reply token, so sharing the link uses no push quota.
+function meetShareDialog(){
+  const text=meetText(S.meet);
+  sheet(`<h3 id="sheetTitle">在群組打 //會議</h3>
+    <p class="hint">機器人會用回覆貼出連結（不花訊息額度）。</p>
+    <div id="meetSharePreview" class="card" style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;margin:8px 0">${esc(text)}</div>
+    <div id="meetCopyFallback" hidden>
+      <label class="f" for="meetCopyText">請選取下方文字並複製</label>
+      <textarea class="t" id="meetCopyText" rows="4" readonly></textarea>
+    </div>
+    <div class="row"><button type="button" class="btn" data-close>關閉</button><button type="button" class="btn primary" id="meetCopy">複製連結文字</button></div>`);
+  const preview=$('meetSharePreview'),fallback=$('meetCopyFallback'),field=$('meetCopyText');
+  $('meetCopy').addEventListener('click',async()=>{
+    try{await navigator.clipboard.writeText(text);}
+    catch(error){preview.hidden=true;fallback.hidden=false;field.value=text;field.focus();field.select();return;}
+    toast('已複製連結文字');
+  });
+}
+
+// Load the teacher-only schedule form and prefill a suggestion when there is no saved time.
+async function loadSchedule(box){
+  skeleton(box,[135]);
+  try{
+    const {schedule,suggestion}=await api('schedule');if($('scheduleSettings')!==box)return;
+    const value=schedule||suggestion||{};
+    box.removeAttribute('aria-busy');
+    box.innerHTML=`<form class="card" id="scheduleForm">
+      <label class="f" for="scheduleDay">星期</label>
+      <select class="t" id="scheduleDay" required><option value="">請選擇</option>
+        ${[...scheduleDays].map((day,i)=>`<option value="${i+1}" ${value.day===i+1?'selected':''}>星期${day}</option>`).join('')}</select>
+      <div class="schedule-times">
+        <div><label class="f" for="scheduleStart">開始</label><input class="t" type="time" id="scheduleStart" value="${esc(value.start||'')}" required></div>
+        <div><label class="f" for="scheduleEnd">結束</label><input class="t" type="time" id="scheduleEnd" value="${esc(value.end||'')}" required></div>
+      </div>
+      <label class="f" for="scheduleMode">上課方式</label>
+      <select class="t" id="scheduleMode" required><option value="">請選擇</option>
+        <option value="online" ${value.mode==='online'?'selected':''}>線上</option><option value="onsite" ${value.mode==='onsite'?'selected':''}>實體</option></select>
+      <p class="hint" id="scheduleSuggestion" ${suggestion?'':'hidden'}>依這學期的訊息推算，請確認</p>
+      <p class="hint" id="scheduleStatus" role="status" hidden></p><p class="err" id="scheduleError" role="alert" hidden></p>
+      <button type="submit" class="btn primary block" style="margin-top:16px">儲存上課時間</button>
+    </form>`;
+  }catch(error){
+    if($('scheduleSettings')!==box)return;
+    box.removeAttribute('aria-busy');box.innerHTML=problem(error,'view');
+  }
 }
 
 // The summary screens stay inside the teacher's 總覽 tab. A week is made of discussion segments the
@@ -585,7 +649,7 @@ const VIEW={
     const mine=++seq;skeleton(main,[76,76,150,56,56]);
     try{
       const o=await api('overview');if(mine!==seq)return;main.removeAttribute('aria-busy');
-      const max=Math.max(1,...o.week.map(w=>w.count));S.meet=o.meet||'';S.meetEdit=false;
+      const max=Math.max(1,...o.week.map(w=>w.count));S.meet=o.meet||'';S.schedule=o.schedule;S.meetEdit=false;
       main.innerHTML=`${meetCard()}<div id="weeklySummary"></div><h2>今天</h2><div class="tiles">
           <div class="tile"><div class="k">訊息</div><div class="v">${o.today.messages} <small>則</small></div></div>
           <div class="tile"><div class="k">發言人數</div><div class="v">${o.today.people} <small>人</small></div></div>
@@ -616,6 +680,7 @@ const VIEW={
   },
   async set(){
     main.innerHTML=`<h2>切換課程</h2><div id="courses"></div>
+      <h2>上課時間</h2><div id="scheduleSettings"></div>
       <h2>這堂課的設定</h2>
       <form class="card" id="setForm" novalidate>
         <label class="f" for="gname" style="margin-top:0">群組名稱</label>
@@ -638,12 +703,15 @@ const VIEW={
         <button type="button" class="btn block" style="margin-top:12px" data-preview>預覽學生畫面</button></div>
       <h2>系統</h2><div class="card"><span class="num">備份機器人 ${esc(S.info.version)}</span>
         <p class="hint">詳細狀態請在和機器人的私聊點狀態列左側，或輸入 //狀態。</p></div>`;
+    const scheduleLoaded=loadSchedule($('scheduleSettings'));
     const box=$('courses');skeleton(box,[56,56]);
     try{
-      S.courses=await api('courses');if(!$('courses'))return;box.removeAttribute('aria-busy');
+      const courses=await api('courses');if($('courses')!==box)return;
+      S.courses=courses;box.removeAttribute('aria-busy');
       box.innerHTML=`<div class="card" role="radiogroup" aria-label="課程">${S.courses.map(c=>`<label class="radio"><input type="radio" name="course" value="${c.code}" ${c.current?'checked':''}>
         <span class="grow">${esc(c.name)}<span class="meta">最後活動 ${when(c.last)}</span></span></label>`).join('')}</div>`;
     }catch(error){box.removeAttribute('aria-busy');box.innerHTML=problem(error,'view');}
+    await scheduleLoaded;
   }
 };
 function render(){seq++;main.removeAttribute('aria-busy');if(typeof rollLeave==='function')rollLeave();tabs();window.scrollTo(0,0);const old=document.querySelector('.actionbar');if(old)old.remove();VIEW[S.tab]();}
@@ -756,7 +824,8 @@ main.addEventListener('click',async e=>{
     t.textContent=expanded?`顯示全部 ${d.summaryAll} 人`:'收合至前 8 人';
     return;
   }
-  if('meetsend' in d){meetSendDialog();return;}
+  if('meetshare' in d){meetShareDialog();return;}
+  if('scheduleopen' in d){$('tabs').querySelector('[data-tab="set"]').click();return;}
   if('meetnew' in d){meetCreate(t);return;}
   if('meetedit' in d){S.meetEdit=true;meetRepaint();$('meetUrl').focus();return;}
   if('meetcancel' in d){S.meetEdit=false;meetRepaint();return;}
@@ -800,6 +869,22 @@ main.addEventListener('submit',e=>{
     busy(btn,async()=>{try{const r=await api('meetSave',{url:v});S.meet=r.meet;S.meetEdit=false;meetRepaint();toast('已儲存會議連結');}
       catch(error){fail('meetErr','meetUrl',error.message);}});
     return;
+  }
+  if(form.id==='scheduleForm'){
+    const schedule={day:+$('scheduleDay').value,start:$('scheduleStart').value,end:$('scheduleEnd').value,mode:$('scheduleMode').value};
+    const status=$('scheduleStatus'),message=$('scheduleError');
+    status.hidden=true;message.hidden=true;
+    return busy(btn,async()=>{
+      try{
+        const r=await api('scheduleSave',schedule);if($('scheduleForm')!==form)return;
+        $('scheduleSuggestion').hidden=true;
+        status.textContent=r.created?'已建立每週固定的會議連結':'上課時間已儲存';
+        status.hidden=false;
+        if(r.meetError){message.textContent=r.meetError;message.hidden=false;}
+      }catch(error){
+        if($('scheduleForm')===form){message.textContent=error.message;message.hidden=false;}
+      }
+    });
   }
   if(form.id==='nickForm'){
     const v=$('nick').value.trim();
