@@ -385,7 +385,10 @@ main.addEventListener('submit',e=>{
     if(!name)return fail('請幫這張配置圖取一個名字，例如教室名稱。');
     if(!R.edit.cells.flat().includes('1'))return fail('至少要留一個座位。');
     busy(btn,async()=>{try{const saved=await api('layoutSave',{id:R.edit.id,name,rows:R.edit.cells.map(r=>r.join('')),labels:R.edit.labels});
-        R.edit=null;rollTake(saved.state);toast('已儲存「'+name+'」');}
+        R.edit=null;rollTake(saved.state);
+        const sync=saved.synced;
+        toast('已儲存「'+name+'」'+(sync?(sync.open?'，這次點名也換成新的配置圖':'，點名畫面也換成新的配置圖')
+          +(sync.moved?'；有 '+sync.moved+' 人點的位置不在新圖上，請幫他們改位置':''):''),sync&&sync.moved?'alert':'ok');}
       catch(error){fail(error.message);}});
   }
 });
@@ -432,7 +435,11 @@ function demoRoll(action,b){
       else if(s.layout.online){if(!DR.pins.some(p=>p.who===who))put(who,next(),'10:09 老師');}else put(who,b.seat,'10:09 老師');return state();}
     case 'rollHistory':return {total:3,sessions:[{day:today,key:'10:00',week:week(today),layout:'台達館 105',count:DR.pins.length},{day:taipei(-7),key:'10:02',week:week(taipei(-7)),layout:'台達館 105',count:5},{day:taipei(-14),key:'10:01',week:week(taipei(-14)),layout:'台達館 105',count:6}],
       people:DEMO_PEOPLE.map((who,i)=>({person:i+3,who,count:[3,3,2,3,1,2][i]})).sort((x,y)=>x.count-y.count)};
-    case 'layoutSave':{const id=b.id&&DR.layouts[b.id]?b.id:'n'+(DR.n++);DR.layouts[id]={name:b.name,rows:b.rows,labels:b.labels||{}};return {id,state:state()};}
+    case 'layoutSave':{const id=b.id&&DR.layouts[b.id]?b.id:'n'+(DR.n++);DR.layouts[id]={name:b.name,rows:b.rows,labels:b.labels||{}};
+      let synced=null;
+      if(DR.session&&!DR.session.layout.online&&DR.def===id){DR.session.layout=DR.layouts[id];
+        synced={open:!DR.session.closed,moved:DR.pins.filter(p=>{const [r,c]=p.seat.split('-').map(Number);return (b.rows[r-1]||'')[c-1]!=='1';}).length};}
+      return {id,state:state(),synced};}
     case 'layoutDelete':delete DR.layouts[b.id];return state();
   }
 }
