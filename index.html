@@ -299,7 +299,7 @@ function meetSessionLine(){
   if(offset===0&&stamp.slice(11,16)>=end)offset=7;
   const date=summaryDay(stamp.slice(0,10),offset),[,m,d]=date.split('-').map(Number);
   const w=week(date).slice(1),time=`${start}–${end}`;
-  const line=offset===0?`今天上課：${time}`:`下次上課：${m}/${d}（${scheduleDays[day-1]}）${time}`;
+  const line=offset===0?`今天上課：${time}`:`本次上課：${m}/${d}（${scheduleDays[day-1]}）${time}`;
   return line+(w&&+w<=S.semesterWeeks?`・第 ${w} 週`:'');
 }
 // Use the bot's plain Meet format when copying the link.
