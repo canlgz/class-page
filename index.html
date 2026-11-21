@@ -392,7 +392,7 @@ function luckyPaint(v){
   const box=$('luckySettings');if(!box)return;S.lucky=v;
   const today=!v.on?'':!v.today?'今天不是這門課的上課日，不會開獎。'
     :v.winner?`今天已開出：<b>${esc(v.winner)}</b>${v.winners&&v.winners[0]&&v.winners[0].after?'（課後抽出）':`（第 ${v.winners&&v.winners[0]?v.winners[0].n:v.n} 則）`}`
-    :`神秘的是 <b>第 ${v.n} 則</b>，已累積 ${v.counted} 則，${v.reached||0} 位達標${v.passing?'，<b>順延中</b>':''}`;
+    :`${v.trial?`<b>試玩中</b>：第 ${v.trial.round} / ${v.trial.max} 輪${v.trial.winners.length?`，已開出 ${esc(v.trial.winners.join('、'))}`:''}。`:''}神秘的是 <b>第 ${v.n} 則</b>，已累積 ${v.counted} 則，${v.reached||0} 位達標${v.passing?'，<b>順延中</b>':''}`;
   box.innerHTML=`<div class="card">
     <div class="rowline"><span class="tag ${v.on?'ok':''}">${v.on?'開啟中':'關閉'}</span><span class="grow"></span>
       <button type="button" class="btn${v.on?'':' primary'}" data-luckyswitch="${v.on?'off':'on'}">${v.on?'關掉':'打開幸運號碼'}</button></div>
@@ -822,15 +822,17 @@ async function luckyMine(){
     const v=await api('luckyMine');if(!$('luckyMine')||!v.on)return;
     let head,line;
     if(!v.today){head='下次上課開始累積';line='上課那天會替你訂一個今日目標。';}
+    else if(v.trial&&v.trial.won){head='你在試玩中中過了 🎉';line=`今天是試玩（第 ${v.trial.round} / ${v.trial.max} 輪），後面幾輪讓給其他同學；試玩不算正式紀錄。`;}
+    else if(v.trial&&v.won){head=`試玩的 ${v.trial.max} 輪都開出囉`;line='謝謝大家一起試玩！下次上課就是正式的幸運號碼。';}
     else if(v.mine){head='你是今天的幸運兒 🎉';line='恭喜！接下來兩次上課先休息，讓其他同學也有機會。';}
     else if(v.resting){head='這次先休息';line='你最近中過幸運兒，這次上課先休息；一樣可以發言，下次再來！';}
     else if(v.won){head='今天的幸運兒已經開出囉';line=`你今天留言 ${v.done} 則${v.reached?'，有達成目標，很棒！':''}。下次上課再來！`;}
-    else if(v.reached){head='已達成今天的目標 ✓';line=v.passing?'獎項順延中！你的下一則留言就有機會接住。':'你已經有資格了，繼續留言，下一則可能就是開獎的那一則！';}
-    else{head=`今日目標 ${v.goal} 則，再 ${v.goal-v.done} 則就達標`;line='依你最近幾次上課的留言量訂的，只要比平常多一點。5 個字以上的留言才算一則。';}
+    else if(v.reached){head='已達成今天的目標 ✓';line=(v.trial?`試玩第 ${v.trial.round} / ${v.trial.max} 輪：`:'')+(v.passing?'獎項順延中！你的下一則留言就有機會接住。':'你已經有資格了，繼續留言，下一則可能就是開獎的那一則！');}
+    else{head=`今日目標 ${v.goal} 則，再 ${v.goal-v.done} 則就達標`;line=(v.trial?`今天是試玩（第 ${v.trial.round} / ${v.trial.max} 輪），不算正式紀錄。`:'')+'依你最近幾次上課的留言量訂的，只要比平常多一點。5 個字以上的留言才算一則。';}
     const pct=v.today?Math.min(100,Math.round(v.done/v.goal*100)):0;
     box.innerHTML=`<div class="card luckycard" style="margin-bottom:16px">
       <div class="rowline"><b>🍀 幸運號碼・${esc(head)}</b></div>
-      ${v.today&&!v.won&&!v.resting?`<div class="luckybar"><div style="width:${pct}%"></div></div>
+      ${v.today&&!v.won&&!v.resting&&!(v.trial&&v.trial.won)?`<div class="luckybar"><div style="width:${pct}%"></div></div>
       <div class="meta"><span>今天 ${v.done} / ${v.goal} 則</span><span>全班已累積 ${v.counted} 則</span></div>`:''}
       <p class="hint" style="margin:8px 0 0">${esc(line)}</p></div>`;
   }catch(error){}
