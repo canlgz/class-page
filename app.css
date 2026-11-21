@@ -273,3 +273,17 @@ body.student[data-tab=files]{--brand:#0c447c;--brand-soft:#e6f1fb}
   body.student[data-tab=log]{--brand:#f0997b;--brand-soft:#3a1d10}
   body.student[data-tab=files]{--brand:#85b7eb;--brand-soft:#0c2240}
 }
+
+/* 幸運號碼 on 我的: a green card, readable in light and dark. */
+.luckycard{background:#e3f7ee;border-color:#9fe1cb;color:#085041}
+.luckycard b{color:#0f6e56}
+.luckycard .meta,.luckycard .hint{color:#2f6f5d}
+.luckybar{height:8px;border-radius:4px;background:#ffffff;margin:10px 0 6px;overflow:hidden}
+.luckybar>div{height:100%;background:#1d9e75}
+@media (prefers-color-scheme:dark){
+  .luckycard{background:#0e3a30;border-color:#1d6b55;color:#d5f3e8}
+  .luckycard b{color:#9fe1cb}
+  .luckycard .meta,.luckycard .hint{color:#a7dcc8}
+  .luckybar{background:#1c4d41}
+  .luckybar>div{background:#5dcaa5}
+}

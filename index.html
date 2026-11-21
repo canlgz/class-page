@@ -172,6 +172,7 @@ async function demoApi(action,b={}){
     case 'init':return {course:DEMO_COURSES.find(c=>c[0]===demo.course)[1]===DEMO_COURSES[0][1]?demo.name:DEMO_COURSES.find(c=>c[0]===demo.course)[1],
       nickname:demo.nick,teacher:demo.teacher,version:'示範',week1:demo.week1||monday(taipei(-66)),...(demo.teacher?{forward:demo.forward,week1Auto:!demo.week1,week1Start:taipei(-66)}:{})};
     case 'me':{const m=FAKE.filter(r=>r.mine);return {messages:m.filter(r=>!r.upload).length,files:m.filter(r=>r.upload).length,last:{day:m[0].day,time:m[0].time}};}
+    case 'luckyMine':return {on:true,today:true,goal:2,done:1,reached:false,resting:false,counted:7,passing:false,won:false,mine:false};
     case 'file':return {name:FAKE.find(r=>r.row===b.row).text,url:''};
     case 'overview':{const t=FAKE.filter(r=>r.day===today);
       return {today:{messages:t.filter(r=>!r.upload).length,uploads:t.filter(r=>r.upload).length,people:new Set(t.map(r=>r.who)).size,last:t[0].time},
@@ -386,19 +387,19 @@ function meetShareDialog(){
 
 // Load the teacher-only schedule form and prefill a suggestion when there is no saved time.
 // 幸運號碼: one switch per class, today's number (the teacher only), and this semester's winners.
-const LUCKY_RULES='🍀 幸運號碼\n1. 每次上課都有一個幸運號碼，只有老師知道。\n2. 在群組發 5 個字以上的訊息就算一則，每人每天最多算 3 則。\n3. 數到幸運號碼的那一則，發的人就是今天的幸運兒，機器人會在群組恭喜你，老師有小獎勵！\n4. 中過的人休息兩次上課；剛好輪到休息中的人，就順延給下一則。\n5. 當天沒人中，下次的號碼會變小，比較容易中 🔥';
+const LUCKY_RULES='🍀 幸運號碼怎麼玩\n全班的留言會一則一則累積。累積到第幾則會開獎是祕密，下一則留言可能就是那一則！\n1. 先達成你的今日目標：依你最近幾次上課的留言量訂 1～5 則，只要比平常多一點；課堂頁「我的」看得到。\n2. 留言累積到開獎的那一則：發出那一則的人已達標，就是今天的幸運兒。\n3. 還沒達標就順延：交給下一位已達標的同學留言。\n4. 5 個字以上的留言才算一則，每人每天最多算 5 則。\n5. 下課前沒人接到，就從今天已達標的同學裡抽一位，每堂一定開出。\n6. 中過的人休息兩次上課。';
 function luckyPaint(v){
   const box=$('luckySettings');if(!box)return;S.lucky=v;
   const today=!v.on?'':!v.today?'今天不是這門課的上課日，不會開獎。'
-    :v.winner?`今天已開出：<b>${esc(v.winner)}</b>（第 ${v.n} 則）`
-    :`今天的幸運號碼：<b>第 ${v.n} 則</b>，已數到 ${v.counted} 則${v.level?`（加碼 ${v.level} 次）`:''}`;
+    :v.winner?`今天已開出：<b>${esc(v.winner)}</b>${v.winners&&v.winners[0]&&v.winners[0].after?'（課後抽出）':`（第 ${v.winners&&v.winners[0]?v.winners[0].n:v.n} 則）`}`
+    :`神秘的是 <b>第 ${v.n} 則</b>，已累積 ${v.counted} 則，${v.reached||0} 位達標${v.passing?'，<b>順延中</b>':''}`;
   box.innerHTML=`<div class="card">
     <div class="rowline"><span class="tag ${v.on?'ok':''}">${v.on?'開啟中':'關閉'}</span><span class="grow"></span>
       <button type="button" class="btn${v.on?'':' primary'}" data-luckyswitch="${v.on?'off':'on'}">${v.on?'關掉':'打開幸運號碼'}</button></div>
-    ${today?`<p style="margin:12px 0 0">${today}</p><p class="hint">號碼只有你看得到。可以在課堂上說「快到了！」炒熱氣氛。</p>`:''}
+    ${today?`<p style="margin:12px 0 0">${today}</p><p class="hint">神秘的則數只有你看得到。可以在課堂上說「快到了！」炒熱氣氛。</p>`:''}
     <details style="margin-top:12px"><summary>給學生看的規則</summary><p class="hint" style="white-space:pre-line">${esc(LUCKY_RULES)}</p>
       <button type="button" class="btn block" data-luckycopy>複製規則</button></details>
-    ${v.winners&&v.winners.length?`<h3 style="margin:16px 0 4px;font-size:15px">這學期的幸運兒</h3><ul class="list">${v.winners.map(w=>`<li><div class="grow"><b>${esc(w.who)}</b><div class="meta"><span class="num">${esc(w.day.slice(5).replace('-','/'))}</span><span>第 ${w.n} 則</span></div></div></li>`).join('')}</ul>`:''}
+    ${v.winners&&v.winners.length?`<h3 style="margin:16px 0 4px;font-size:15px">這學期的幸運兒</h3><ul class="list">${v.winners.map(w=>`<li><div class="grow"><b>${esc(w.who)}</b><div class="meta"><span class="num">${esc(w.day.slice(5).replace('-','/'))}</span><span>${w.after?'課後抽出':`第 ${w.n} 則`}</span></div></div></li>`).join('')}</ul>`:''}
   </div>`;
 }
 async function loadLucky(box){
@@ -724,7 +725,7 @@ const VIEW={
     loadSummary(mine);
   },
   me(){
-    main.innerHTML=`<h2>我在這堂課的紀錄</h2><div id="stats"></div><div id="list" style="margin-top:16px"></div>
+    main.innerHTML=`<h2>我在這堂課的紀錄</h2><div id="luckyMine"></div><div id="stats"></div><div id="list" style="margin-top:16px"></div>
       ${nickForm()}
       <h2>戳戳老師</h2>
       <form class="card" id="pokeForm" novalidate>
@@ -736,7 +737,7 @@ const VIEW={
       </form>`;
     // The records above load later and push the poke box down; arriving from 私下戳戳老師 (the poke
     // box still focused), bring it back into view once they are in.
-    Promise.allSettled([stats(),fillList($('list'),{mine:true},'你在這堂課還沒有被備份到的訊息。在群組傳一則訊息後再回來看看。')])
+    Promise.allSettled([luckyMine(),stats(),fillList($('list'),{mine:true},'你在這堂課還沒有被備份到的訊息。在群組傳一則訊息後再回來看看。')])
       .then(()=>{const box=$('poke');if(S.tab==='me'&&box&&document.activeElement===box)box.closest('form').scrollIntoView({block:'center'});});
   },
   async home(){
@@ -814,6 +815,26 @@ const VIEW={
 };
 function render(){seq++;main.removeAttribute('aria-busy');document.body.dataset.tab=S.tab;if(typeof rollLeave==='function')rollLeave();tabs();window.scrollTo(0,0);const old=document.querySelector('.actionbar');if(old)old.remove();VIEW[S.tab]();}
 
+// 幸運號碼 on 我的: today's goal and progress, only for this student. Nothing when it is off.
+async function luckyMine(){
+  const box=$('luckyMine');if(!box)return;
+  try{
+    const v=await api('luckyMine');if(!$('luckyMine')||!v.on)return;
+    let head,line;
+    if(!v.today){head='下次上課開始累積';line='上課那天會替你訂一個今日目標。';}
+    else if(v.mine){head='你是今天的幸運兒 🎉';line='恭喜！接下來兩次上課先休息，讓其他同學也有機會。';}
+    else if(v.resting){head='這次先休息';line='你最近中過幸運兒，這次上課先休息；一樣可以發言，下次再來！';}
+    else if(v.won){head='今天的幸運兒已經開出囉';line=`你今天留言 ${v.done} 則${v.reached?'，有達成目標，很棒！':''}。下次上課再來！`;}
+    else if(v.reached){head='已達成今天的目標 ✓';line=v.passing?'獎項順延中！你的下一則留言就有機會接住。':'你已經有資格了，繼續留言，下一則可能就是開獎的那一則！';}
+    else{head=`今日目標 ${v.goal} 則，再 ${v.goal-v.done} 則就達標`;line='依你最近幾次上課的留言量訂的，只要比平常多一點。5 個字以上的留言才算一則。';}
+    const pct=v.today?Math.min(100,Math.round(v.done/v.goal*100)):0;
+    box.innerHTML=`<div class="card luckycard" style="margin-bottom:16px">
+      <div class="rowline"><b>🍀 幸運號碼・${esc(head)}</b></div>
+      ${v.today&&!v.won&&!v.resting?`<div class="luckybar"><div style="width:${pct}%"></div></div>
+      <div class="meta"><span>今天 ${v.done} / ${v.goal} 則</span><span>全班已累積 ${v.counted} 則</span></div>`:''}
+      <p class="hint" style="margin:8px 0 0">${esc(line)}</p></div>`;
+  }catch(error){}
+}
 async function stats(){
   const box=$('stats');box.innerHTML='<div class="sk" style="height:76px"></div>';
   try{
@@ -926,7 +947,7 @@ main.addEventListener('click',async e=>{
   if('scheduleopen' in d){$('tabs').querySelector('[data-tab="set"]').click();return;}
   if('luckyswitch' in d){
     const on=d.luckyswitch==='on';
-    busy(t,async()=>{try{luckyPaint(await api('luckySwitch',{on}));toast(on?'已打開幸運號碼，從下一則發言開始數':'已關掉幸運號碼，紀錄會保留');}catch(error){toast(error.message,'alert');}});
+    busy(t,async()=>{try{luckyPaint(await api('luckySwitch',{on}));toast(on?'已打開幸運號碼，從下一則留言開始累積':'已關掉幸運號碼，紀錄會保留');}catch(error){toast(error.message,'alert');}});
     return;
   }
   if('luckycopy' in d){
