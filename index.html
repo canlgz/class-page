@@ -387,7 +387,7 @@ function meetShareDialog(){
 
 // Load the teacher-only schedule form and prefill a suggestion when there is no saved time.
 // 幸運號碼: one switch per class, today's number (the teacher only), and this semester's winners.
-const LUCKY_RULES='🍀 幸運號碼怎麼玩\n全班的留言會一則一則累積。累積到第幾則會開獎是祕密，下一則留言可能就是那一則！\n1. 先達成你的今日目標：依你最近 4 次上課的發言量訂一個字數目標（平常的 1.2 倍，60～300 字）。合計字數達標，2 則就夠；寫到一半要 3 則；更少就 4 則。課堂頁「我的」看得到。\n2. 留言累積到開獎的那一則：發出那一則的人已達標，就是今天的幸運兒。\n3. 還沒達標就順延：交給下一位已達標的同學留言。\n4. 上課期間 5 個字以上的留言才算一則（字數只算文字和數字），每人每天最多算 5 則。\n5. 下課前沒人接到，就從今天已達標的同學裡抽一位，每堂一定開出；留言越踴躍，最多開到 3 位。\n6. 中過的人休息兩次上課。';
+const LUCKY_RULES='🍀 幸運號碼怎麼玩\n全班的留言會一則一則累積。累積到第幾則會開獎是祕密，下一則留言可能就是那一則！\n1. 先達成你的今日目標：依你最近 4 次上課的發言量訂一個字數目標（平常的 1.2 倍，60～300 字）。合計字數達標，2 則就夠；寫到一半要 3 則；更少就 4 則。課堂頁「我的」看得到。\n2. 留言累積到開獎的那一則：發出那一則的人已達標，就是今天的幸運兒。\n3. 還沒達標就順延：交給下一位已達標的同學留言。\n4. 一則至少幾個字也依你平常的發言量訂：你平常一則字數的 1/5，最少 8 字、最多 20 字（還沒有紀錄先用 10 字），課堂頁「我的」看得到。字數只算文字和數字；同一天重複貼一樣的話只算一次。每人每天最多算 5 則。\n5. 下課前沒人接到，就從今天已達標的同學裡抽一位，每堂一定開出；留言越踴躍，最多開到 3 位。\n6. 中過的人休息兩次上課。';
 function luckyPaint(v){
   const box=$('luckySettings');if(!box)return;S.lucky=v;
   const today=!v.on?'':!v.today?'今天不是這門課的上課日，不會開獎。'
@@ -840,8 +840,9 @@ async function luckyMine(){
     else if(v.reached){head='已達成今天的目標 ✓';line=(v.trial?`試玩第 ${v.trial.round} / ${v.trial.max} 輪：`:'')+(v.passing?'獎項順延中！你的下一則留言就有機會接住。':'你已經有資格了，繼續留言，下一則可能就是開獎的那一則！');}
     else{
       const why=v.fresh?'你還沒有上課的發言紀錄，先用 60 字暖身。':'字數目標依你最近幾次上課的發言量訂（平常的 1.2 倍）。';
-      if(!v.inClass&&!v.counted&&!v.trial){head=`今日字數目標 ${v.target} 字`;line='上課開始後，你的留言才會開始累積。'+why;}
-      else{head=luckyNext(v);line=(v.trial?`今天是試玩（第 ${v.trial.round} / ${v.trial.max} 輪），不算正式紀錄。`:'')+why+'上課期間 5 個字以上的留言才算一則。';}
+      const min=v.min?`今天一則至少 ${v.min} 字（${v.unit?`你平常一則約 ${v.unit} 字`:'你還沒有上課的發言紀錄，先用 10 字'}），重複的話只算一次。`:'';
+      if(!v.inClass&&!v.counted&&!v.trial){head=`今日字數目標 ${v.target} 字`;line='上課開始後，你的留言才會開始累積。'+why+min;}
+      else{head=luckyNext(v);line=(v.trial?`今天是試玩（第 ${v.trial.round} / ${v.trial.max} 輪），不算正式紀錄。`:'')+why+min;}
     }
     const pct=v.today?Math.min(100,Math.round(v.done/v.goal*100)):0;
     const live=v.today&&!v.won&&!v.resting&&!(v.trial&&v.trial.won);
