@@ -172,7 +172,7 @@ async function demoApi(action,b={}){
     case 'init':return {course:DEMO_COURSES.find(c=>c[0]===demo.course)[1]===DEMO_COURSES[0][1]?demo.name:DEMO_COURSES.find(c=>c[0]===demo.course)[1],
       nickname:demo.nick,teacher:demo.teacher,version:'示範',week1:demo.week1||monday(taipei(-66)),...(demo.teacher?{forward:demo.forward,week1Auto:!demo.week1,week1Start:taipei(-66)}:{})};
     case 'me':{const m=FAKE.filter(r=>r.mine);return {messages:m.filter(r=>!r.upload).length,files:m.filter(r=>r.upload).length,last:{day:m[0].day,time:m[0].time}};}
-    case 'luckyMine':return {on:true,today:true,goal:2,done:1,reached:false,resting:false,counted:7,passing:false,won:false,mine:false};
+    case 'luckyMine':return {on:true,today:true,goal:3,done:1,chars:40,target:72,half:36,fresh:false,reached:false,resting:false,counted:7,passing:false,won:false,mine:false,inClass:true};
     case 'file':return {name:FAKE.find(r=>r.row===b.row).text,url:''};
     case 'overview':{const t=FAKE.filter(r=>r.day===today);
       return {today:{messages:t.filter(r=>!r.upload).length,uploads:t.filter(r=>r.upload).length,people:new Set(t.map(r=>r.who)).size,last:t[0].time},
@@ -387,7 +387,7 @@ function meetShareDialog(){
 
 // Load the teacher-only schedule form and prefill a suggestion when there is no saved time.
 // 幸運號碼: one switch per class, today's number (the teacher only), and this semester's winners.
-const LUCKY_RULES='🍀 幸運號碼怎麼玩\n全班的留言會一則一則累積。累積到第幾則會開獎是祕密，下一則留言可能就是那一則！\n1. 先達成你的今日目標：依你最近幾次上課的留言量訂 1～5 則，只要比平常多一點；課堂頁「我的」看得到。\n2. 留言累積到開獎的那一則：發出那一則的人已達標，就是今天的幸運兒。\n3. 還沒達標就順延：交給下一位已達標的同學留言。\n4. 上課期間 5 個字以上的留言才算一則，每人每天最多算 5 則。\n5. 下課前沒人接到，就從今天已達標的同學裡抽一位，每堂一定開出；留言越踴躍，最多開到 3 位。\n6. 中過的人休息兩次上課。';
+const LUCKY_RULES='🍀 幸運號碼怎麼玩\n全班的留言會一則一則累積。累積到第幾則會開獎是祕密，下一則留言可能就是那一則！\n1. 先達成你的今日目標：依你最近 4 次上課的發言量訂一個字數目標（平常的 1.2 倍，60～300 字）。合計字數達標，2 則就夠；寫到一半要 3 則；更少就 4 則。課堂頁「我的」看得到。\n2. 留言累積到開獎的那一則：發出那一則的人已達標，就是今天的幸運兒。\n3. 還沒達標就順延：交給下一位已達標的同學留言。\n4. 上課期間 5 個字以上的留言才算一則（字數只算文字和數字），每人每天最多算 5 則。\n5. 下課前沒人接到，就從今天已達標的同學裡抽一位，每堂一定開出；留言越踴躍，最多開到 3 位。\n6. 中過的人休息兩次上課。';
 function luckyPaint(v){
   const box=$('luckySettings');if(!box)return;S.lucky=v;
   const today=!v.on?'':!v.today?'今天不是這門課的上課日，不會開獎。'
@@ -815,6 +815,16 @@ const VIEW={
 };
 function render(){seq++;main.removeAttribute('aria-busy');document.body.dataset.tab=S.tab;if(typeof rollLeave==='function')rollLeave();tabs();window.scrollTo(0,0);const old=document.querySelector('.actionbar');if(old)old.remove();VIEW[S.tab]();}
 
+// The quickest way to the goal from here: fewer messages by writing more, or just more messages.
+function luckyNext(v){
+  const remain=Math.max(0,v.goal-v.done);let best=null;
+  [[2,v.target],[3,v.half]].forEach(([t,line])=>{
+    if(v.chars>=line||t>=v.goal)return;
+    const msgs=Math.max(1,t-v.done);
+    if(msgs<remain&&(!best||msgs<best.msgs))best={msgs,more:line-v.chars};
+  });
+  return best?`再 ${best.msgs} 則、${best.msgs>1?'合計':''}寫滿 ${best.more} 字就達標；不然再 ${remain} 則`:`再 ${remain} 則就達標`;
+}
 // 幸運號碼 on 我的: today's goal and progress, only for this student. Nothing when it is off.
 async function luckyMine(){
   const box=$('luckyMine');if(!box)return;
@@ -828,13 +838,18 @@ async function luckyMine(){
     else if(v.resting){head='這次先休息';line='你最近中過幸運兒，這次上課先休息；一樣可以發言，下次再來！';}
     else if(v.won){head='今天的幸運兒已經開出囉';line=`你今天留言 ${v.done} 則${v.reached?'，有達成目標，很棒！':''}。下次上課再來！`;}
     else if(v.reached){head='已達成今天的目標 ✓';line=(v.trial?`試玩第 ${v.trial.round} / ${v.trial.max} 輪：`:'')+(v.passing?'獎項順延中！你的下一則留言就有機會接住。':'你已經有資格了，繼續留言，下一則可能就是開獎的那一則！');}
-    else if(!v.inClass&&!v.counted&&!v.trial){head=`今日目標 ${v.goal} 則`;line='上課開始後，你的留言才會開始累積。依你最近幾次上課的留言量訂的，只要比平常多一點。';}
-    else{head=`今日目標 ${v.goal} 則，再 ${v.goal-v.done} 則就達標`;line=(v.trial?`今天是試玩（第 ${v.trial.round} / ${v.trial.max} 輪），不算正式紀錄。`:'')+'依你最近幾次上課的留言量訂的，只要比平常多一點。5 個字以上的留言才算一則。';}
+    else{
+      const why=v.fresh?'你還沒有上課的發言紀錄，先用 60 字暖身。':'字數目標依你最近幾次上課的發言量訂（平常的 1.2 倍）。';
+      if(!v.inClass&&!v.counted&&!v.trial){head=`今日字數目標 ${v.target} 字`;line='上課開始後，你的留言才會開始累積。'+why;}
+      else{head=luckyNext(v);line=(v.trial?`今天是試玩（第 ${v.trial.round} / ${v.trial.max} 輪），不算正式紀錄。`:'')+why+'上課期間 5 個字以上的留言才算一則。';}
+    }
     const pct=v.today?Math.min(100,Math.round(v.done/v.goal*100)):0;
+    const live=v.today&&!v.won&&!v.resting&&!(v.trial&&v.trial.won);
+    const tiers=v.target?`<div class="luckytiers" aria-label="字數越多，需要的則數越少">${[[2,`達標 ${v.target} 字`],[3,`一半 ${v.half} 字`],[4,'更少']].map(([n,t])=>`<span class="${v.goal===n?'on':''}"><small>${t}</small><b>${n} 則</b></span>`).join('')}</div>`:'';
     box.innerHTML=`<div class="card luckycard" style="margin-bottom:16px">
       <div class="rowline"><b>🍀 幸運號碼・${esc(head)}</b></div>
-      ${v.today&&!v.won&&!v.resting&&!(v.trial&&v.trial.won)?`<div class="luckybar"><div style="width:${pct}%"></div></div>
-      <div class="meta"><span>今天 ${v.done} / ${v.goal} 則</span><span>全班已累積 ${v.counted} 則</span></div>`:''}
+      ${live?`<div class="luckybar"><div style="width:${pct}%"></div></div>
+      <div class="meta"><span>今天 ${v.done} / ${v.goal} 則・合計 ${v.chars||0} 字</span><span>全班已累積 ${v.counted} 則</span></div>${tiers}`:''}
       <p class="hint" style="margin:8px 0 0">${esc(line)}</p></div>`;
   }catch(error){}
 }

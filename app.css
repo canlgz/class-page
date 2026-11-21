@@ -280,10 +280,19 @@ body.student[data-tab=files]{--brand:#0c447c;--brand-soft:#e6f1fb}
 .luckycard .meta,.luckycard .hint{color:#2f6f5d}
 .luckybar{height:8px;border-radius:4px;background:#ffffff;margin:10px 0 6px;overflow:hidden}
 .luckybar>div{height:100%;background:#1d9e75}
+.luckytiers{display:flex;gap:6px;margin:8px 0 4px}
+.luckytiers span{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:1px;padding:5px 4px;border-radius:8px;background:#ffffff;color:#2f6f5d;border:1px solid #9fe1cb}
+.luckytiers small{font-size:11px;line-height:1.3;white-space:nowrap}
+.luckytiers b{font-size:14px;line-height:1.3;color:inherit}
+.luckytiers span.on{background:#1d9e75;border-color:#1d9e75;color:#ffffff}
+.luckycard .luckytiers span.on b{color:#ffffff}
 @media (prefers-color-scheme:dark){
   .luckycard{background:#0e3a30;border-color:#1d6b55;color:#d5f3e8}
   .luckycard b{color:#9fe1cb}
   .luckycard .meta,.luckycard .hint{color:#a7dcc8}
   .luckybar{background:#1c4d41}
   .luckybar>div{background:#5dcaa5}
+  .luckytiers span{background:#1c4d41;border-color:#1d6b55;color:#a7dcc8}
+  .luckytiers span.on{background:#5dcaa5;border-color:#5dcaa5;color:#06281f}
+  .luckycard .luckytiers span.on b{color:#06281f}
 }
