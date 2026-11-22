@@ -178,9 +178,11 @@ async function demoApi(action,b={}){
     case 'praise':{const r=FAKE.find(x=>x.row===b.row);
       if(!r||!r.canStar)throw Object.assign(new Error(r&&r.mine?'不能推薦自己的留言。':'這則留言不能推薦。'),{code:'invalid'});
       const teacher=demo.teacher&&!b.asStudent;
+      if(b.on===false){if(r.starred){r.starred=false;r.star--;if(teacher)r.starT--;else demo.praiseLeft=Math.min(3,demo.praiseLeft+1);}
+        return {row:r.row,star:r.star,starred:false,starPage:false,left:teacher?null:demo.praiseLeft};}
       if(!r.starred){if(!teacher&&demo.praiseLeft<=0)throw Object.assign(new Error('今天已經推薦 3 則了，留給最喜歡的發言吧！明天可以再推薦。'),{code:'limit'});
         r.starred=true;r.star++;if(teacher)r.starT++;else demo.praiseLeft--;}
-      return {row:r.row,star:r.star,starred:true,left:teacher?null:demo.praiseLeft};}
+      return {row:r.row,star:r.star,starred:true,starPage:true,left:teacher?null:demo.praiseLeft};}
     case 'praiseStats':return {daily:3,people:[['王子晴',2,4,3],['林柏宇',1,2,2],['陳語彤',1,3,2],['張家豪',0,1,1]].map(([who,teacher,peers,givers])=>({who,teacher,peers,givers}))};
     case 'luckyMine':return {on:true,today:true,goal:3,done:1,chars:40,target:72,half:36,fresh:false,reached:false,resting:false,counted:7,passing:false,won:false,mine:false,inClass:true};
     case 'file':return {name:FAKE.find(r=>r.row===b.row).text,url:''};
@@ -291,7 +293,7 @@ function row(m){
 // 🌟 推薦: a button on others' messages (pressed once), a count on one's own.
 function star(m){
   const n=m.star?` ${m.star}`:'';
-  if(m.canStar)return `<button type="button" class="star${m.starred?' on':''}" data-star="${m.row}" aria-pressed="${m.starred}" aria-label="${m.starred?'已推薦':'推薦'} ${esc(m.who)} ${m.time} 的留言${m.star?`，共 ${m.star} 個推薦`:''}">🌟${n}</button>`;
+  if(m.canStar)return `<button type="button" class="star${m.starred?' on':''}" data-star="${m.row}" aria-pressed="${m.starred}" aria-label="${m.starred?'已推薦（再按一次取消）':'推薦'} ${esc(m.who)} ${m.time} 的留言${m.star?`，共 ${m.star} 個推薦`:''}">🌟${n}</button>`;
   return m.star?`<span class="star on" aria-label="被推薦 ${m.star} 次">🌟${n}</span>`:'';
 }
 function grouped(items,lastDay){
@@ -403,7 +405,7 @@ function meetShareDialog(){
 
 // Load the teacher-only schedule form and prefill a suggestion when there is no saved time.
 // 幸運號碼: one switch per class, today's number (the teacher only), and this semester's winners.
-const PRAISE_HOW='推薦好的發言：在群組長按那則留言、選「回覆」，只打 👍、讚、+1 或推，或回覆一張讚／加油／愛心的貼圖；也可以在「歷程」按留言旁的 🌟。不能推薦自己，每人每天最多推薦 3 則。';
+const PRAISE_HOW='推薦好的發言：在群組長按那則留言、選「回覆」，只打 👍、讚、+1 或推，或回覆一張讚／加油／愛心的貼圖；也可以在「歷程」按留言旁的 🌟，按錯再按一次就取消。不能推薦自己，每人每天最多推薦 3 則。';
 const LUCKY_RULES='🍀 幸運號碼怎麼玩\n全班的留言會一則一則累積。累積到第幾則會開獎是祕密，下一則留言可能就是那一則！\n1. 先達成你的今日目標：依你最近 4 次上課的發言量訂一個字數目標（平常的 1.2 倍，60～300 字）。合計字數達標，2 則就夠；寫到一半要 3 則；更少就 4 則。課堂頁「我的」看得到。\n2. 留言累積到開獎的那一則：發出那一則的人已達標，就是今天的幸運兒。\n3. 還沒達標就順延：交給下一位已達標的同學留言。\n4. 一則至少幾個字也依你平常的發言量訂：你平常一則字數的 1/5，最少 8 字、最多 20 字（還沒有紀錄先用 10 字），課堂頁「我的」看得到。字數只算文字和數字；同一天重複貼一樣的話只算一次，收回的留言不算。每人每天最多算 5 則。\n5. 下課前沒人接到，就從今天已達標的同學裡抽一位，每堂一定開出；留言越踴躍，最多開到 3 位。\n6. 中過的人休息兩次上課。';
 function luckyPaint(v){
   const box=$('luckySettings');if(!box)return;S.lucky=v;
@@ -1001,12 +1003,15 @@ main.addEventListener('click',async e=>{
     return;
   }
   if('star' in d){
-    if(t.classList.contains('on')){toast('已經推薦過這則了');return;}
+    // Pressed again: takes one's own 🌟 back (a praise made by reply is taken back in LINE).
+    const undo=t.classList.contains('on');
     t.disabled=true;
     try{
-      const r=await api('praise',{row:Number(d.star)});
-      t.classList.add('on');t.setAttribute('aria-pressed','true');t.textContent='🌟 '+r.star;
-      toast(r.left==null?'已推薦這則留言':r.left?`已推薦，今天還能推薦 ${r.left} 則`:'已推薦，今天的 3 次推薦用完了');
+      const r=await api('praise',{row:Number(d.star),on:!undo});
+      t.classList.toggle('on',r.starred);t.setAttribute('aria-pressed',String(r.starred));t.textContent='🌟'+(r.star?' '+r.star:'');
+      t.setAttribute('aria-label',(r.starred?'已推薦（再按一次取消）':'推薦')+'這則留言'+(r.star?`，共 ${r.star} 個推薦`:''));
+      const left=r.left==null?'':r.left?`，今天還能推薦 ${r.left} 則`:'，今天的 3 次推薦用完了';
+      toast(r.starred?(r.left==null?'已推薦這則留言':'已推薦'+left)+'（按錯可以再按一次取消）':'已取消推薦'+left);
     }catch(error){toast(error.message,'alert');}
     finally{t.disabled=false;}
     return;
