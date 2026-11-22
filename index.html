@@ -267,7 +267,7 @@ const asTeacher=()=>S.info.teacher&&!S.preview;
 // Students get the warm look of their group menu and a greeting for the time of day (Taipei); the
 // teacher's view keeps its plain look. The teacher's student preview shows the students' look.
 function greeting(){const h=new Date(Date.now()+8*3600e3).getUTCHours();
-  return h>=5&&h<11?'早安！睡醒了沒？☀️':h>=11&&h<14?'吃飽了嗎？🍱':h>=14&&h<18?'午安～要有精神喔 💪':h>=18&&h<23?'晚上好，今天辛苦了 🌙':'這麼晚還沒睡喔？🦉';}
+  return h>=5&&h<11?'早安！睡醒了沒？☀️':h>=11&&h<14?'吃飽了嗎？🍱':h>=14&&h<18?'午安～要有精神喔 💪':h>=18&&h<23?'晚安～今天辛苦了 🌙':'這麼晚還沒睡喔？🦉';}
 function header(){$('course').textContent=S.info.course;document.title=S.info.course+'・課堂頁面';
   const t=asTeacher();document.body.classList.toggle('student',!t);
   $('who').textContent=t?'老師檢視':(S.info.nickname||'尚未設定暱稱')+'（你）・'+greeting();$('preview').hidden=!S.preview;}
@@ -492,7 +492,7 @@ const SUMMARY_DAYS='一二三四五六日';
 const SUMMARY_SETUP='尚未設定 OpenAI 金鑰：到 Apps Script 專案設定的指令碼屬性加入 OPENAI_API_KEY';
 const SUMMARY_OUTCOME={consensus:'已有共識',split:'看法分歧',answered:'已獲回答',open:'沒有結論',info:'資訊分享'};
 const SUMMARY_ROLE={ask:'提問',answer:'回答',view:'提出看法',counter:'提出不同看法',example:'補充例子',organize:'整理歸納',admin:'行政事務'};
-const SUMMARY_TABS=[['talk','討論'],['people','參與者'],['data','數據']];
+const SUMMARY_TABS=[['talk','討論'],['people','參與者'],['data','統計']];
 const summaryDay=(day,offset)=>new Date(Date.parse(day)+offset*864e5).toISOString().slice(0,10);
 const summaryDate=day=>day.slice(5,10).replace('-','/');
 const daysUntil=(from,to)=>Math.round((Date.parse(to)-Date.parse(from))/864e5);
@@ -757,7 +757,7 @@ const VIEW={
       ${nickForm()}
       <h2>戳戳老師</h2>
       <form class="card" id="pokeForm" novalidate>
-        <label class="f" for="poke" style="margin-top:0">私下傳給老師的短訊</label>
+        <label class="f" for="poke" style="margin-top:0">私下傳給老師的訊息</label>
         <textarea class="t" id="poke" maxlength="300" aria-describedby="pokeHelp"></textarea>
         <p class="hint" id="pokeHelp">只有老師看得到，不會出現在群組裡。</p>
         <p class="err" id="pokeErr" role="alert" hidden></p>
