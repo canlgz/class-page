@@ -305,3 +305,14 @@ span.star{display:inline-flex;align-items:center}
 .acts{display:flex;flex-direction:column;align-items:flex-end;gap:var(--s2);flex:0 0 auto}
 .tpick{color:#7a5600;background:#fff7d6;border-radius:999px;padding:0 8px;font-weight:600}
 @media (prefers-color-scheme:dark){.star.on,.tpick{background:#3d3210;border-color:#8a6d1f;color:#f5d77a}}
+
+/* 📎 歷程補充：AI 的一句話，掛在訊息底下 */
+.notes{margin-top:var(--s1);padding:2px 0 2px var(--s2);border-left:3px solid var(--line);font-size:14px;line-height:1.5;color:var(--ink-2)}
+.notes ul{list-style:none;margin:0;padding:0}
+.notes li{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px}
+.notes li>span:nth-child(2){flex:1 1 12em;min-width:0;overflow-wrap:anywhere}
+.notes li b{color:var(--ink);font-weight:600}
+.notes li.off>span:nth-child(2){opacity:.6;text-decoration:line-through}
+.note-tag{font-size:12px;font-weight:600}
+.note-off{font-size:12px;color:var(--warn)}
+.note-hide{font-size:13px;color:var(--brand);padding:0 4px}
