@@ -296,3 +296,12 @@ body.student[data-tab=files]{--brand:#0c447c;--brand-soft:#e6f1fb}
   .luckytiers span.on{background:#5dcaa5;border-color:#5dcaa5;color:#06281f}
   .luckycard .luckytiers span.on b{color:#06281f}
 }
+
+/* 🌟 推薦 */
+.star{flex:0 0 auto;align-self:center;border:1px solid var(--line);background:var(--surface);border-radius:999px;min-height:36px;min-width:44px;padding:0 10px;font-size:14px;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+button.star{cursor:pointer}
+.star.on{background:#fff7d6;border-color:#f0c64a;color:#7a5600;font-weight:600}
+span.star{display:inline-flex;align-items:center}
+.acts{display:flex;flex-direction:column;align-items:flex-end;gap:var(--s2);flex:0 0 auto}
+.tpick{color:#7a5600;background:#fff7d6;border-radius:999px;padding:0 8px;font-weight:600}
+@media (prefers-color-scheme:dark){.star.on,.tpick{background:#3d3210;border-color:#8a6d1f;color:#f5d77a}}

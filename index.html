@@ -96,7 +96,9 @@ const FAKE=[
  [-1,'18:02','李宜蓁','video','影片'],[-2,'14:20','陳語彤','text','分享一篇講串流平台分潤的報導 https://example.com/streaming-revenue-share-2026'],
  [-2,'14:05','黃品叡','image','圖片'],[-3,'11:48','王子晴','file','第一組_企劃書v2.pdf'],[-3,'11:30','林柏宇','text','第三組下週三可以先跟老師約時間討論嗎？'],
 ].map((r,i,a)=>({row:9+a.length-i,day:taipei(r[0]),time:r[1],who:r[2],type:r[3],text:r[4],upload:r[3]!=='text',mine:r[2]===(QUERY.get('demo')==='teacher'?'老師':'陳語彤')}));
-const demo={teacher:QUERY.get('demo')==='teacher',nick:QUERY.get('demo')==='teacher'?'老師':'陳語彤',name:'媒體產業研究',forward:-1,course:'a'};
+const demo={teacher:QUERY.get('demo')==='teacher',nick:QUERY.get('demo')==='teacher'?'老師':'陳語彤',name:'媒體產業研究',forward:-1,course:'a',praiseLeft:3};
+// 推薦 on the made-up rows: a few already have stars, one from the teacher.
+FAKE.forEach(r=>{r.canStar=!r.mine&&r.who!=='老師';r.star=r.row%4===0?2:r.row%7===0?1:0;r.starT=r.row%8===0?1:0;r.starred=false;});
 const demoMeetings=new Map();
 // Keep the demo's Meet and class time separate for each course.
 function demoMeeting(){
@@ -165,13 +167,21 @@ function demoSummaries(){
 }
 async function demoApi(action,b={}){
   await new Promise(r=>setTimeout(r,500));
-  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend','meetCreate','schedule','scheduleSave','summaryRefresh','openAiStatus','openAiKeySave','luckyStatus','luckySwitch'].includes(action))
+  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend','meetCreate','schedule','scheduleSave','summaryRefresh','openAiStatus','openAiKeySave','luckyStatus','luckySwitch','praiseStats'].includes(action))
     throw Object.assign(new Error('這個功能只有老師能用。'),{code:'teacher_only'});
   const pub=({...r})=>r;
   switch(action){
     case 'init':return {course:DEMO_COURSES.find(c=>c[0]===demo.course)[1]===DEMO_COURSES[0][1]?demo.name:DEMO_COURSES.find(c=>c[0]===demo.course)[1],
       nickname:demo.nick,teacher:demo.teacher,version:'示範',week1:demo.week1||monday(taipei(-66)),...(demo.teacher?{forward:demo.forward,week1Auto:!demo.week1,week1Start:taipei(-66)}:{})};
-    case 'me':{const m=FAKE.filter(r=>r.mine);return {messages:m.filter(r=>!r.upload).length,files:m.filter(r=>r.upload).length,last:{day:m[0].day,time:m[0].time}};}
+    case 'me':{const m=FAKE.filter(r=>r.mine);return {messages:m.filter(r=>!r.upload).length,files:m.filter(r=>r.upload).length,last:{day:m[0].day,time:m[0].time},
+      praise:{teacher:1,peers:3,givers:2,left:demo.teacher&&!b.asStudent?null:demo.praiseLeft}};}
+    case 'praise':{const r=FAKE.find(x=>x.row===b.row);
+      if(!r||!r.canStar)throw Object.assign(new Error(r&&r.mine?'不能推薦自己的留言。':'這則留言不能推薦。'),{code:'invalid'});
+      const teacher=demo.teacher&&!b.asStudent;
+      if(!r.starred){if(!teacher&&demo.praiseLeft<=0)throw Object.assign(new Error('今天已經推薦 3 則了，留給最喜歡的發言吧！明天可以再推薦。'),{code:'limit'});
+        r.starred=true;r.star++;if(teacher)r.starT++;else demo.praiseLeft--;}
+      return {row:r.row,star:r.star,starred:true,left:teacher?null:demo.praiseLeft};}
+    case 'praiseStats':return {daily:3,people:[['王子晴',2,4,3],['林柏宇',1,2,2],['陳語彤',1,3,2],['張家豪',0,1,1]].map(([who,teacher,peers,givers])=>({who,teacher,peers,givers}))};
     case 'luckyMine':return {on:true,today:true,goal:3,done:1,chars:40,target:72,half:36,fresh:false,reached:false,resting:false,counted:7,passing:false,won:false,mine:false,inClass:true};
     case 'file':return {name:FAKE.find(r=>r.row===b.row).text,url:''};
     case 'overview':{const t=FAKE.filter(r=>r.day===today);
@@ -275,8 +285,14 @@ async function busy(btn,work){const label=btn.innerHTML;btn.disabled=true;btn.te
 function row(m){
   const body=m.upload?`<div class="filebox">${ic(m.type)}<span>${esc(m.text)}</span></div>`:`<div class="text">${esc(m.text)}</div>`;
   const box=S.select?`<input class="check" type="checkbox" data-pick="${m.row}" data-label="${esc(m.who+'：'+m.text)}" ${S.picked.has(m.row)?'checked':''} aria-label="選取 ${esc(m.who)} ${m.time} 的訊息">`:'';
-  return `<li>${box}<div class="grow"><div class="meta"><b>${esc(m.who||'（未設定暱稱）')}</b><span class="num">${m.time}</span>${m.mine?'<span>我</span>':''}</div>${body}</div>
-    ${m.upload&&!S.select?`<button type="button" class="btn" data-get="${m.row}" data-name="${esc(m.text)}">${ic('down')}取回</button>`:''}</li>`;
+  return `<li>${box}<div class="grow"><div class="meta"><b>${esc(m.who||'（未設定暱稱）')}</b><span class="num">${m.time}</span>${m.mine?'<span>我</span>':''}${m.starT?'<span class="tpick">老師推薦</span>':''}</div>${body}</div>
+    ${S.select?'':m.upload?`<div class="acts"><button type="button" class="btn" data-get="${m.row}" data-name="${esc(m.text)}">${ic('down')}取回</button>${star(m)}</div>`:star(m)}</li>`;
+}
+// 🌟 推薦: a button on others' messages (pressed once), a count on one's own.
+function star(m){
+  const n=m.star?` ${m.star}`:'';
+  if(m.canStar)return `<button type="button" class="star${m.starred?' on':''}" data-star="${m.row}" aria-pressed="${m.starred}" aria-label="${m.starred?'已推薦':'推薦'} ${esc(m.who)} ${m.time} 的留言${m.star?`，共 ${m.star} 個推薦`:''}">🌟${n}</button>`;
+  return m.star?`<span class="star on" aria-label="被推薦 ${m.star} 次">🌟${n}</span>`:'';
 }
 function grouped(items,lastDay){
   let out='',day=lastDay||'';
@@ -387,6 +403,7 @@ function meetShareDialog(){
 
 // Load the teacher-only schedule form and prefill a suggestion when there is no saved time.
 // 幸運號碼: one switch per class, today's number (the teacher only), and this semester's winners.
+const PRAISE_HOW='推薦好的發言：在群組長按那則留言、選「回覆」，只打 👍、讚、+1 或推，或回覆一張讚／加油／愛心的貼圖；也可以在「歷程」按留言旁的 🌟。不能推薦自己，每人每天最多推薦 3 則。';
 const LUCKY_RULES='🍀 幸運號碼怎麼玩\n全班的留言會一則一則累積。累積到第幾則會開獎是祕密，下一則留言可能就是那一則！\n1. 先達成你的今日目標：依你最近 4 次上課的發言量訂一個字數目標（平常的 1.2 倍，60～300 字）。合計字數達標，2 則就夠；寫到一半要 3 則；更少就 4 則。課堂頁「我的」看得到。\n2. 留言累積到開獎的那一則：發出那一則的人已達標，就是今天的幸運兒。\n3. 還沒達標就順延：交給下一位已達標的同學留言。\n4. 一則至少幾個字也依你平常的發言量訂：你平常一則字數的 1/5，最少 8 字、最多 20 字（還沒有紀錄先用 10 字），課堂頁「我的」看得到。字數只算文字和數字；同一天重複貼一樣的話只算一次，收回的留言不算。每人每天最多算 5 則。\n5. 下課前沒人接到，就從今天已達標的同學裡抽一位，每堂一定開出；留言越踴躍，最多開到 3 位。\n6. 中過的人休息兩次上課。';
 function luckyPaint(v){
   const box=$('luckySettings');if(!box)return;S.lucky=v;
@@ -401,6 +418,15 @@ function luckyPaint(v){
       <button type="button" class="btn block" data-luckycopy>複製規則</button></details>
     ${v.winners&&v.winners.length?`<h3 style="margin:16px 0 4px;font-size:15px">這學期的幸運兒</h3><ul class="list">${v.winners.map(w=>`<li><div class="grow"><b>${esc(w.who)}</b><div class="meta"><span class="num">${esc(w.day.slice(5).replace('-','/'))}</span><span>${w.after?'課後抽出':`第 ${w.n} 則`}</span></div></div></li>`).join('')}</ul>`:''}
   </div>`;
+}
+// The teacher's 推薦 list: everyone praised this semester, teacher's and classmates' apart.
+async function loadPraise(box){
+  if(!box)return;skeleton(box,[76]);
+  try{
+    const v=await api('praiseStats');if($('praiseStats')!==box)return;box.removeAttribute('aria-busy');
+    box.innerHTML=`<div class="card"><p class="hint" style="margin-top:0">${PRAISE_HOW}老師推薦不限次數，群組裡不會有機器人回覆。</p>
+      ${v.people.length?`<ul class="list" style="margin-top:12px">${v.people.map(p=>`<li><div class="grow"><b>${esc(p.who)}</b><div class="meta"><span>老師推薦 ${p.teacher}</span><span>同學推薦 ${p.peers}（${p.givers} 位）</span></div></div></li>`).join('')}</ul>`:'<p class="hint">這學期還沒有人被推薦。</p>'}</div>`;
+  }catch(error){box.removeAttribute('aria-busy');box.innerHTML=problem(error,'view');}
 }
 async function loadLucky(box){
   if(!box)return;skeleton(box,[76]);
@@ -779,6 +805,7 @@ const VIEW={
     main.innerHTML=`<h2>切換課程</h2><div id="courses"></div>
       <h2>上課時間</h2><div id="scheduleSettings"></div>
       <h2>🍀 幸運號碼</h2><div id="luckySettings"></div>
+      <h2>🌟 推薦</h2><div id="praiseStats"></div>
       <h2>這堂課的設定</h2>
       <form class="card" id="setForm" novalidate>
         <label class="f" for="gname" style="margin-top:0">群組名稱</label>
@@ -802,7 +829,7 @@ const VIEW={
       <h2>OpenAI 花費</h2><div id="openAiSettings"></div>
       <h2>系統</h2><div class="card"><span class="num">備份機器人 ${esc(S.info.version)}</span>
         <p class="hint">詳細狀態請在和機器人的私聊點狀態列左側，或輸入 //狀態。</p></div>`;
-    const scheduleLoaded=loadSchedule($('scheduleSettings'));loadOpenAi($('openAiSettings'));loadLucky($('luckySettings'));
+    const scheduleLoaded=loadSchedule($('scheduleSettings'));loadOpenAi($('openAiSettings'));loadLucky($('luckySettings'));loadPraise($('praiseStats'));
     const box=$('courses');skeleton(box,[56,56]);
     try{
       const courses=await api('courses');if($('courses')!==box)return;
@@ -858,8 +885,12 @@ async function stats(){
   const box=$('stats');box.innerHTML='<div class="sk" style="height:76px"></div>';
   try{
     const me=await api('me');if(!$('stats'))return;
+    const pr=me.praise||{teacher:0,peers:0,givers:0,left:null};
     box.innerHTML=`<div class="tiles"><div class="tile"><div class="k">訊息</div><div class="v">${me.messages} <small>則</small></div></div>
-      <div class="tile"><div class="k">上傳檔案</div><div class="v">${me.files} <small>個</small></div></div></div>
+      <div class="tile"><div class="k">上傳檔案</div><div class="v">${me.files} <small>個</small></div></div>
+      <div class="tile"><div class="k">🌟 老師推薦</div><div class="v">${pr.teacher} <small>次</small></div></div>
+      <div class="tile"><div class="k">🌟 同學推薦</div><div class="v">${pr.peers} <small>次${pr.givers?`・${pr.givers} 位同學`:''}</small></div></div></div>
+      <p class="hint">${PRAISE_HOW}${pr.left==null?'':`今天還能推薦 ${pr.left} 則。`}</p>
       <p class="hint">${me.last?`最後一次被備份：${when(me.last)}。這裡看得到，就代表老師那邊也有紀錄。`:'還沒有紀錄。'}</p>`;
   }catch(error){box.innerHTML=problem(error,'view');}
 }
@@ -967,6 +998,17 @@ main.addEventListener('click',async e=>{
   if('luckyswitch' in d){
     const on=d.luckyswitch==='on';
     busy(t,async()=>{try{luckyPaint(await api('luckySwitch',{on}));toast(on?'已打開幸運號碼，從下一則留言開始累積':'已關掉幸運號碼，紀錄會保留');}catch(error){toast(error.message,'alert');}});
+    return;
+  }
+  if('star' in d){
+    if(t.classList.contains('on')){toast('已經推薦過這則了');return;}
+    t.disabled=true;
+    try{
+      const r=await api('praise',{row:Number(d.star)});
+      t.classList.add('on');t.setAttribute('aria-pressed','true');t.textContent='🌟 '+r.star;
+      toast(r.left==null?'已推薦這則留言':r.left?`已推薦，今天還能推薦 ${r.left} 則`:'已推薦，今天的 3 次推薦用完了');
+    }catch(error){toast(error.message,'alert');}
+    finally{t.disabled=false;}
     return;
   }
   if('luckycopy' in d){
