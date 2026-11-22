@@ -240,8 +240,8 @@ async function demoApi(action,b={}){
     case 'meetCreate':return demoCreateMeet(demoMeeting());
     case 'meetSend':throw Object.assign(new Error('請在群組裡打 //線上，機器人會用回覆貼出連結（不花訊息額度）。'),{code:'use_reply'});
     case 'summaries':return demoSummaries();
-    case 'notesStatus':return {on:demoNotes.on,configured:true,test:false,schedule:demoSchedule()};
-    case 'notesSwitch':demoNotes.on=!!b.on;return {on:demoNotes.on,configured:true,test:false,schedule:demoSchedule()};
+    case 'notesStatus':return {on:demoNotes.on,configured:true,schedule:demoSchedule()};
+    case 'notesSwitch':demoNotes.on=!!b.on;return {on:demoNotes.on,configured:true,schedule:demoSchedule()};
     case 'noteHide':if(!/^[lt][A-Za-z0-9_-]{12}$/.test(String(b.key||'')))throw Object.assign(new Error('找不到這則補充。'),{code:'bad_request'});
       if(b.hide===false)demoNotes.hidden.delete(b.key);else demoNotes.hidden.add(b.key);return {key:b.key,hidden:b.hide!==false};
     case 'summaryRefresh':{
@@ -467,7 +467,6 @@ function notesPaint(v){
     <p class="hint">同學貼的網址，在「歷程」那則訊息底下附一句 20 字內的簡介；比較難懂的專有名詞附一句說明，一天最多 3 個。群組裡不會出現任何訊息。</p>
     <p class="hint">網址大約半小時內補上；名詞等群組安靜一小時後才整理。網站擋機器人或要登入時只寫「讀不到」，不讓 AI 猜。說明不準可以在歷程按「隱藏」，同學就看不到。</p>
     ${v.configured?'':'<p class="hint" style="color:var(--danger)">還沒設定 OpenAI 金鑰，打開也不會產生補充。</p>'}
-    ${v.test&&v.on?'<p class="hint">這是測試課，預設就是開的。</p>':''}
     ${scheduleLine(v.schedule)}
   </div>`;
 }
