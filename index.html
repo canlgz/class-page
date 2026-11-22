@@ -175,7 +175,7 @@ function demoSummaries(){
 }
 async function demoApi(action,b={}){
   await new Promise(r=>setTimeout(r,500));
-  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend','meetCreate','schedule','scheduleSave','summaryRefresh','openAiStatus','openAiKeySave','luckyStatus','luckySwitch','praiseStats','notesStatus','notesSwitch','noteHide'].includes(action))
+  if((!demo.teacher||b.asStudent)&&['overview','handin','courses','saveSettings','broadcast','meetSave','meetSend','meetCreate','schedule','scheduleSave','summaryRefresh','openAiStatus','openAiKeySave','openAiBalanceSave','luckyStatus','luckySwitch','praiseStats','notesStatus','notesSwitch','noteHide'].includes(action))
     throw Object.assign(new Error('這個功能只有老師能用。'),{code:'teacher_only'});
   // Students never get a hidden note; nobody gets one while 歷程補充 is off.
   const pub=({...r})=>{if(r.notes){const n=demoNotes.on?r.notes.map(x=>({...x,off:demoNotes.hidden.has(x.key)})).filter(x=>(demo.teacher&&!b.asStudent)||!x.off):[];
@@ -215,6 +215,11 @@ async function demoApi(action,b={}){
     case 'luckySwitch':{const v=demo.lucky||{on:false,today:today,level:1,n:4,counted:2,winner:'',winners:[{day:taipei(-7),who:'王子晴',n:6}]};
       v.on=!!b.on;demo.lucky=v;return v;}
     case 'openAiStatus':return demo.openAi||{set:false,masked:''};
+    case 'openAiBalanceSave':{const o=demo.openAi;
+      if(!o||!o.set)throw Object.assign(new Error('先設定管理員金鑰，才算得出之後花了多少。'),{code:'invalid'});
+      if(b.usd===''||b.usd==null){const {balance,...rest}=o;demo.openAi=rest;return rest;}
+      const usd=Number(b.usd);if(!(usd>=0&&usd<=100000))throw Object.assign(new Error('請輸入 OpenAI 後台顯示的餘額，例如 8.50。'),{code:'invalid'});
+      o.balance={usd:Math.round(usd*100)/100,at:new Date().toISOString(),spent:0.18,left:Math.round((usd-0.18)*100)/100};return o;}
     case 'openAiKeySave':{const key=String(b.key||'').trim();
       if(!key){demo.openAi={set:false,masked:''};return demo.openAi;}
       if(!/^sk-admin-[A-Za-z0-9_-]{20,}$/.test(key))throw Object.assign(new Error('請貼上 OpenAI 的管理員金鑰，開頭是 sk-admin-。'),{code:'invalid'});
@@ -480,10 +485,27 @@ async function loadLucky(box){
 // OpenAI's spend this month on the teacher's LINE menu needs a read-only Admin key. It is saved here
 // because the Apps Script editor's script-property page is full; the page only ever sees its ends.
 const OPENAI_KEY_HELP='到 platform.openai.com → Settings → Organization → Admin keys，建一把「唯讀」的管理員金鑰貼在這裡。存的時候會先實際查一次花費確認可用。';
+// OpenAI has no API for the credit balance: the teacher copies it once, the server takes off the spend since.
+const OPENAI_BALANCE_HELP='OpenAI 沒有提供讀餘額的方式：到 platform.openai.com → Settings → Billing 看「Credit balance」，填在這裡，之後會自動扣掉花費。儲值後再填一次。';
+function openAiBalance(st){
+  const b=st.balance;
+  if(S.openAiBalanceEdit)return `<form id="openAiBalanceForm" novalidate style="margin-top:16px">
+      <label class="f" for="openAiBalance" style="margin-top:0">OpenAI 後台的餘額（Credit balance，美元）</label>
+      <input class="t" id="openAiBalance" type="text" inputmode="decimal" autocomplete="off" placeholder="例如 8.50" value="${b?b.usd.toFixed(2):''}" aria-describedby="openAiBalanceHelp openAiBalanceErr">
+      <p class="hint" id="openAiBalanceHelp">${OPENAI_BALANCE_HELP}</p>
+      <p class="err" id="openAiBalanceErr" role="alert" hidden></p>
+      <div class="rowline" style="margin-top:12px"><button class="btn primary grow" type="submit">儲存餘額</button><button type="button" class="btn" data-openaibalancecancel>取消</button></div></form>`;
+  if(!b)return `<p class="hint" style="margin-top:16px">${OPENAI_BALANCE_HELP}</p><button type="button" class="btn block" data-openaibalanceedit>填寫餘額</button>`;
+  const low=b.left<1;
+  return `<div class="hint" style="margin-top:16px">餘額（估計）</div><div class="big num"${low?' style="color:var(--danger)"':''}>${b.left<0?'可能用完了':'約 US$'+b.left.toFixed(2)}</div>
+    <p class="hint">${summaryTime(b.at)} 填的是 US$${b.usd.toFixed(2)}，之後花了 US$${b.spent.toFixed(2)}（填的那天整天都算，所以會估得少一點）。${low?'快用完了，記得到 OpenAI 儲值。':''}儲值後請再填一次。</p>
+    <div class="rowline" style="margin-top:12px"><button type="button" class="btn grow" data-openaibalanceedit>更新餘額</button>
+      <button type="button" class="btn" data-openaibalanceclear style="color:var(--danger)">清除餘額</button></div>`;
+}
 function openAiPaint(st,editing){
   const box=$('openAiSettings');if(!box)return;S.openAi=st;
   box.innerHTML=st.set&&!editing?`<div class="card">
-      ${st.error?`<p class="err" style="margin-top:0">${esc(st.error)}</p>`:`<div class="hint" style="margin:0">本月已花費（OpenAI 帳單）</div><div class="big num">US$${Number(st.usd||0).toFixed(2)}</div>`}
+      ${st.error?`<p class="err" style="margin-top:0">${esc(st.error)}</p>`:`<div class="hint" style="margin:0">本月已花費（OpenAI 帳單）</div><div class="big num">US$${Number(st.usd||0).toFixed(2)}</div>${openAiBalance(st)}`}
       <p class="hint">管理員金鑰：<span class="num">${esc(st.masked)}</span>。老師私訊選單的標題列也會顯示這個金額，每小時更新一次。</p>
       <div class="rowline" style="margin-top:12px"><button type="button" class="btn grow" data-openaiedit>換一把金鑰</button>
         <button type="button" class="btn" data-openaiclear style="color:var(--danger)">清除</button></div></div>`
@@ -1098,6 +1120,12 @@ main.addEventListener('click',async e=>{
     return;
   }
   if('openaiedit' in d){openAiPaint(S.openAi,true);$('openAiKey').focus();return;}
+  if('openaibalanceedit' in d){S.openAiBalanceEdit=true;openAiPaint(S.openAi,false);$('openAiBalance').focus();return;}
+  if('openaibalancecancel' in d){S.openAiBalanceEdit=false;openAiPaint(S.openAi,false);return;}
+  if('openaibalanceclear' in d){
+    busy(t,async()=>{try{const st=await api('openAiBalanceSave',{usd:''});S.openAiBalanceEdit=false;openAiPaint(st,false);toast('已清除餘額');}catch(error){toast(error.message,'alert');}});
+    return;
+  }
   if('openaicancel' in d){openAiPaint(S.openAi,false);return;}
   if('openaiclear' in d){
     const close=sheet(`<h3 id="sheetTitle">清除 OpenAI 管理員金鑰？</h3><p class="hint">清除後老師選單不再顯示 OpenAI 花費。金鑰本身在 OpenAI 後台還在，要停用請到那裡刪除。</p>
@@ -1154,6 +1182,13 @@ main.addEventListener('submit',e=>{
     if(!v)return fail('openAiErr','openAiKey','請貼上管理員金鑰。');
     busy(btn,async()=>{try{const st=await api('openAiKeySave',{key:v});openAiPaint(st,false);toast('已儲存，本月已花費 US$'+Number(st.usd||0).toFixed(2));}
       catch(error){fail('openAiErr','openAiKey',error.message);}});
+    return;
+  }
+  if(form.id==='openAiBalanceForm'){
+    const v=$('openAiBalance').value.trim().replace(/^US\$|^\$/i,'');
+    if(!v||!(Number(v)>=0))return fail('openAiBalanceErr','openAiBalance','請輸入 OpenAI 後台顯示的餘額，例如 8.50。');
+    busy(btn,async()=>{try{const st=await api('openAiBalanceSave',{usd:Number(v)});S.openAiBalanceEdit=false;openAiPaint(st,false);toast('已儲存餘額，之後會自動扣掉花費');}
+      catch(error){fail('openAiBalanceErr','openAiBalance',error.message);}});
     return;
   }
   if(form.id==='scheduleForm'){
