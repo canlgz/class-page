@@ -1245,7 +1245,7 @@ async function boot(tab){
       if(!liff.isLoggedIn()){liff.login({redirectUri:location.href});return;}
       auth.idToken=liff.getIDToken();
       auth.course=new URLSearchParams(location.search).get('c')||'';
-      if(!auth.course)throw Object.assign(new Error('請從課堂群組的「備份」選單開啟這個頁面。'),{code:'no_course'});
+      if(!auth.course)throw Object.assign(new Error('請在課堂群組 @機器人 叫出選單，再從選單開啟這個頁面。'),{code:'no_course'});
     }
     S.info=await api('init');
     // ?tab=me from the menu's nickname line; only a tab this person has.
