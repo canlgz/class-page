@@ -434,16 +434,17 @@ function meetShareDialog(){
 // Load the teacher-only schedule form and prefill a suggestion when there is no saved time.
 // 幸運號碼: one switch per class, today's number (the teacher only), and this semester's winners.
 const PRAISE_HOW='推薦好的發言：在群組長按那則留言、選「回覆」，只打 👍、讚、+1 或推，或回覆一張讚／加油／愛心的貼圖；也可以在「歷程」按留言旁的 🌟，按錯再按一次就取消。不能推薦自己，每人每天最多推薦 3 則。';
-const LUCKY_RULES='🍀 幸運號碼怎麼玩\n全班的留言會一則一則累積。累積到第幾則會開獎是祕密，下一則留言可能就是那一則！\n1. 先達成你的今日目標：依你最近 4 次上課的發言量訂一個字數目標（平常的 1.2 倍，60～300 字）。合計字數達標，2 則就夠；寫到一半要 3 則；更少就 4 則。課堂頁「我的」看得到。\n2. 留言累積到開獎的那一則：發出那一則的人已達標，就是今天的幸運兒。\n3. 還沒達標就順延：交給下一位已達標的同學留言。\n4. 一則至少幾個字也依你平常的發言量訂：你平常一則字數的 1/5，最少 8 字、最多 20 字（還沒有紀錄先用 10 字），課堂頁「我的」看得到。字數只算文字和數字；同一天重複貼一樣的話只算一次，收回的留言不算。每人每天最多算 5 則。\n5. 下課前沒人接到，就從今天已達標的同學裡抽一位，每堂一定開出；留言越踴躍，最多開到 3 位。\n6. 中過的人休息兩次上課。';
+const LUCKY_RULES='🍀 幸運號碼怎麼玩\n全班的留言會一則一則累積。累積到第幾則會開獎是祕密，下一則留言可能就是那一則！\n1. 先達成你的今日目標：依你最近 4 次上課的發言量訂一個字數目標（平常的 1.2 倍，60～300 字）。合計字數達標，2 則就夠；寫到一半要 3 則；更少就 4 則。課堂頁「我的」看得到。\n2. 留言累積到開獎的那一則：發出那一則的人已達標，就是今天的幸運兒。\n3. 還沒達標就順延：交給下一位已達標的同學留言。\n4. 一則至少幾個字也依你平常的發言量訂：你平常一則字數的 1/5，最少 8 字、最多 20 字（還沒有紀錄先用 10 字），課堂頁「我的」看得到。字數只算文字和數字；同一天重複貼一樣的話只算一次，收回的留言不算。每人每天最多算 5 則。\n5. 下課前沒人接到，就從今天已達標的同學裡抽一位，每堂一定開出；留言越踴躍，最多開到 3 位。老師也可以指定這次開出幾位，下課前沒開完的會抽出補齊。\n6. 中過的人休息兩次上課。\n7. 老師可以在課堂中重新開始：全班的留言和每個人的今日目標，從那一刻重新累積；已經中過的人照樣休息。';
 function luckyPaint(v){
   const box=$('luckySettings');if(!box)return;S.lucky=v;
   const today=!v.on?'':!v.today?'今天不是這門課的上課日，不會開獎。'
     :v.winner&&!v.todayWinners?`今天已開出：<b>${esc(v.winner)}</b>${v.winners&&v.winners[0]&&v.winners[0].after?'（課後抽出）':`（第 ${v.winners&&v.winners[0]?v.winners[0].n:v.n} 則）`}`
-    :`${v.trial?`<b>試玩中</b>：第 ${v.trial.round} / ${v.trial.max} 輪${v.trial.winners.length?`，已開出 ${esc(v.trial.winners.join('、'))}`:''}。`:''}${v.closed?'今天已結束':`神秘的是 <b>第 ${v.n} 則</b>${v.round>1?`（第 ${v.round} 位）`:''}`}，已累積 ${v.counted} 則，${v.reached||0} 位達標${v.passing?'，<b>順延中</b>':''}${v.todayWinners&&v.todayWinners.length?`，今天的幸運兒：${esc(v.todayWinners.join('、'))}`:''}`;
+    :`${v.trial?`<b>試玩中</b>：第 ${v.trial.round} / ${v.trial.max} 輪${v.trial.winners.length?`，已開出 ${esc(v.trial.winners.join('、'))}`:''}。`:''}${v.set?`這次指定開出 <b>${v.set} 位</b>，已開出 ${v.wins||0} 位。`:''}${v.closed?'今天已結束':`神秘的是 <b>第 ${v.n} 則</b>${v.set>1?`（第 ${v.round} / ${v.set} 位）`:!v.set&&v.round>1?`（第 ${v.round} 位）`:''}`}，已累積 ${v.counted} 則，${v.reached||0} 位達標${v.passing?'，<b>順延中</b>':''}${v.todayWinners&&v.todayWinners.length?`，今天的幸運兒：${esc(v.todayWinners.join('、'))}`:''}`;
   box.innerHTML=`<div class="card">
     <div class="rowline"><span class="tag ${v.on?'ok':''}">${v.on?'開啟中':'關閉'}</span><span class="grow"></span>
       <button type="button" class="btn${v.on?'':' primary'}" data-luckyswitch="${v.on?'off':'on'}">${v.on?'關掉':'打開幸運號碼'}</button></div>
     ${today?`<p style="margin:12px 0 0">${today}</p><p class="hint">神秘的則數只有你看得到。可以在課堂上說「快到了！」炒熱氣氛。</p>`:''}
+    ${v.on?`<p class="hint">在群組打「//獎勵 3」指定這次開出幾位（1～10 位）；上課中再打一次 //獎勵 就從頭重新計算，已開出的幸運兒照算。</p>`:''}
     <details style="margin-top:12px"><summary>給學生看的規則</summary><p class="hint" style="white-space:pre-line">${esc(LUCKY_RULES)}</p>
       <button type="button" class="btn block" data-luckycopy>複製規則</button></details>
     ${v.winners&&v.winners.length?`<h3 style="margin:16px 0 4px;font-size:15px">這學期的幸運兒</h3><ul class="list">${v.winners.map(w=>`<li><div class="grow"><b>${esc(w.who)}</b><div class="meta"><span class="num">${esc(w.day.slice(5).replace('-','/'))}</span><span>${w.after?'課後抽出':`第 ${w.n} 則`}</span></div></div></li>`).join('')}</ul>`:''}
@@ -940,13 +941,13 @@ async function luckyMine(){
     else if(v.trial&&v.won){head=`試玩的 ${v.trial.max} 輪都開出囉`;line='謝謝大家一起試玩！下次上課就是正式的幸運號碼。';}
     else if(v.mine){head='你是今天的幸運兒 🎉';line='恭喜！接下來兩次上課先休息，讓其他同學也有機會。';}
     else if(v.resting){head='這次先休息';line='你最近中過幸運兒，這次上課先休息；一樣可以發言，下次再來！';}
-    else if(v.won){head='今天的幸運兒已經開出囉';line=`你今天留言 ${v.done} 則${v.reached?'，有達成目標，很棒！':''}。下次上課再來！`;}
-    else if(v.reached){head='已達成今天的目標 ✓';line=(v.trial?`試玩第 ${v.trial.round} / ${v.trial.max} 輪：`:'')+(v.passing?'獎項順延中！你的下一則留言就有機會接住。':'你已經有資格了，繼續留言，下一則可能就是開獎的那一則！');}
+    else if(v.won){head=v.set>1?`這次的 ${v.set} 位幸運兒都開出囉`:'今天的幸運兒已經開出囉';line=`你今天留言 ${v.done} 則${v.reached?'，有達成目標，很棒！':''}。下次上課再來！`;}
+    else if(v.reached){head='已達成今天的目標 ✓';line=(v.trial?`試玩第 ${v.trial.round} / ${v.trial.max} 輪：`:'')+(v.set>1?`這次會開出 ${v.set} 位幸運兒，已開出 ${v.wins} 位。`:'')+(v.passing?'獎項順延中！你的下一則留言就有機會接住。':'你已經有資格了，繼續留言，下一則可能就是開獎的那一則！');}
     else{
       const why=v.fresh?'你還沒有上課的發言紀錄，先用 60 字暖身。':'字數目標依你最近幾次上課的發言量訂（平常的 1.2 倍）。';
       const min=v.min?`今天一則至少 ${v.min} 字（${v.unit?`你平常一則約 ${v.unit} 字`:'你還沒有上課的發言紀錄，先用 10 字'}），重複的話只算一次、收回的不算。`:'';
       if(!v.inClass&&!v.counted&&!v.trial){head=`今日字數目標 ${v.target} 字`;line='上課開始後，你的留言才會開始累積。'+why+min;}
-      else{head=luckyNext(v);line=(v.trial?`今天是試玩（第 ${v.trial.round} / ${v.trial.max} 輪），不算正式紀錄。`:'')+why+min;}
+      else{head=luckyNext(v);line=(v.trial?`今天是試玩（第 ${v.trial.round} / ${v.trial.max} 輪），不算正式紀錄。`:'')+(v.again>1?'老師重新開始了，你的留言從那時起重新累積。':'')+(v.set>1?`這次會開出 ${v.set} 位幸運兒，已開出 ${v.wins} 位。`:'')+why+min;}
     }
     const pct=v.today?Math.min(100,Math.round(v.done/v.goal*100)):0;
     const live=v.today&&!v.won&&!v.resting&&!(v.trial&&v.trial.won);
