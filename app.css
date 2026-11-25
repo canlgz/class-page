@@ -31,6 +31,15 @@ svg.i{width:22px;height:22px;flex:none;fill:none;stroke:currentColor;stroke-widt
 .role button[aria-pressed=true]{background:var(--brand);color:var(--on-brand);font-weight:600}
 .demo{background:var(--warn-soft);color:var(--warn);font-size:12px;text-align:center;padding:2px var(--s4)}
 main{padding:var(--s4) var(--s4) calc(var(--nav-h) + 88px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto}
+/* 下次要做的事 above every tab (index.html todos()); it scrolls away with the page. */
+.todos{max-width:640px;margin:var(--s4) auto 0;padding:0 var(--s4)}
+.todos>*{background:var(--warn-soft)}
+.todos h2{margin:0;padding:var(--s3) var(--s4) var(--s1);font-size:14px;color:var(--warn);border-radius:var(--radius) var(--radius) 0 0}
+.todos ul{margin:0;padding:0 var(--s4) var(--s3);list-style:none;border-radius:0 0 var(--radius) var(--radius)}
+.todos li{display:flex;gap:var(--s3);justify-content:space-between;align-items:baseline;padding:3px 0;font-size:15px;line-height:1.5}
+.todos li+li{border-top:1px dashed color-mix(in srgb,var(--warn) 25%,transparent)}
+.todos .due{flex:none;font-size:12px;color:var(--warn);white-space:nowrap}
+.todos:not([hidden])+main{padding-top:var(--s3)}
 nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);border-top:1px solid var(--line);
   display:flex;padding-bottom:env(safe-area-inset-bottom)}
 nav.tabs button{flex:1;border:0;background:transparent;min-height:var(--nav-h);display:flex;flex-direction:column;align-items:center;
